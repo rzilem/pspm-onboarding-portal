@@ -1,0 +1,228 @@
+// ============================================================
+// PSPM Onboarding Portal — Shared Types
+// ============================================================
+
+// --- Templates ---
+
+export interface Template {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  estimated_days: number | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  tasks?: TemplateTask[];
+}
+
+export interface TemplateTask {
+  id: string;
+  template_id: string;
+  title: string;
+  description: string | null;
+  order_index: number;
+  visibility: 'internal' | 'external';
+  assignee_type: 'staff' | 'client';
+  category: TaskCategory;
+  requires_file_upload: boolean;
+  requires_signature: boolean;
+  depends_on: string | null;
+  created_at: string;
+}
+
+// --- Projects ---
+
+export interface Project {
+  id: string;
+  name: string;
+  template_id: string | null;
+  source_deal_id: string | null;
+  source_deal_name: string | null;
+  client_company_name: string | null;
+  client_contact_name: string | null;
+  client_contact_email: string | null;
+  client_contact_phone: string | null;
+  community_name: string | null;
+  total_units: number | null;
+  management_start_date: string | null;
+  public_token: string;
+  status: ProjectStatus;
+  assigned_staff_email: string | null;
+  started_at: string | null;
+  target_completion_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ProjectStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
+
+// --- Tasks ---
+
+export interface Task {
+  id: string;
+  project_id: string;
+  template_task_id: string | null;
+  title: string;
+  description: string | null;
+  order_index: number;
+  visibility: 'internal' | 'external';
+  assignee_type: 'staff' | 'client';
+  assignee_email: string | null;
+  category: TaskCategory;
+  requires_file_upload: boolean;
+  requires_signature: boolean;
+  status: TaskStatus;
+  completed_at: string | null;
+  completed_by: string | null;
+  depends_on: string | null;
+  staff_notes: string | null;
+  client_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TaskStatus = 'pending' | 'in_progress' | 'waiting_client' | 'completed' | 'skipped';
+export type TaskCategory = 'documents' | 'setup' | 'signatures' | 'review' | 'financial' | 'communication';
+
+// --- Files ---
+
+export interface OnboardingFile {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  file_name: string;
+  file_type: string | null;
+  file_size: number | null;
+  storage_path: string;
+  uploaded_by: string | null;
+  uploaded_by_type: 'client' | 'staff';
+  category: string | null;
+  description: string | null;
+  created_at: string;
+}
+
+// --- Documents (templates for signing) ---
+
+export interface Document {
+  id: string;
+  name: string;
+  description: string | null;
+  template_url: string | null;
+  category: 'agreement' | 'disclosure' | 'authorization';
+  requires_signature: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Signatures ---
+
+export interface Signature {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  document_id: string | null;
+  signer_name: string;
+  signer_email: string | null;
+  signer_title: string | null;
+  signer_company: string | null;
+  signature_type: 'draw' | 'type' | null;
+  signature_data: string | null;
+  typed_name: string | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  consent_text: string | null;
+  consent_given_at: string | null;
+  document_hash: string | null;
+  signed_pdf_path: string | null;
+  status: SignatureStatus;
+  sign_token: string;
+  requested_at: string;
+  viewed_at: string | null;
+  signed_at: string | null;
+  declined_at: string | null;
+  decline_reason: string | null;
+  created_at: string;
+}
+
+export type SignatureStatus = 'pending' | 'sent' | 'viewed' | 'signed' | 'declined';
+
+// --- Signature Audit ---
+
+export interface SignatureAudit {
+  id: string;
+  signature_id: string;
+  event_type: string;
+  event_data: Record<string, unknown> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+}
+
+// --- Activity Log ---
+
+export interface ActivityLog {
+  id: string;
+  project_id: string;
+  task_id: string | null;
+  actor: string | null;
+  actor_type: 'staff' | 'client' | 'system';
+  action: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+
+// --- API Responses ---
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  status: ProjectStatus;
+  community_name: string | null;
+  client_contact_name: string | null;
+  assigned_staff_email: string | null;
+  progress: number; // 0-100
+  total_tasks: number;
+  completed_tasks: number;
+  days_active: number | null;
+  created_at: string;
+}
+
+export interface PortalView {
+  project: Pick<
+    Project,
+    'id' | 'name' | 'status' | 'community_name' | 'client_company_name' | 'client_contact_name' | 'management_start_date'
+  >;
+  tasks: Array<
+    Pick<Task, 'id' | 'title' | 'description' | 'category' | 'status' | 'requires_file_upload' | 'requires_signature' | 'client_notes' | 'order_index'>
+  >;
+  progress: number;
+  total_tasks: number;
+  completed_tasks: number;
+  signatures: Array<Pick<Signature, 'id' | 'status' | 'signer_name' | 'document_id'>>;
+  files: Array<Pick<OnboardingFile, 'id' | 'file_name' | 'task_id' | 'created_at'>>;
+}
+
+export interface DashboardStats {
+  total_projects: number;
+  active_projects: number;
+  completed_projects: number;
+  avg_completion_days: number | null;
+  pending_signatures: number;
+  pending_uploads: number;
+}
+
+export interface CrmProjectSummary {
+  id: string;
+  name: string;
+  status: ProjectStatus;
+  progress: number;
+  days_active: number | null;
+  next_action: string | null;
+  portal_url: string;
+  total_tasks: number;
+  completed_tasks: number;
+  pending_signatures: number;
+}

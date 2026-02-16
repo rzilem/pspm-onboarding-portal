@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseRest } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
+import { evaluateAutomations } from '@/lib/automation-engine';
 import type { Task } from '@/lib/types';
 
 /**
@@ -19,6 +20,7 @@ export async function PATCH(
     const body = await req.json();
 
     // Auto-set completed_at and completed_by on status transition to 'completed'
+    // Clear completed_at if status changes from 'completed' to something else
     let action = 'task_updated';
     if (body.status === 'completed') {
       body.completed_at = new Date().toISOString();
@@ -26,6 +28,10 @@ export async function PATCH(
         body.completed_by = body.assignee_email || req.headers.get('x-user-email') || 'system';
       }
       action = 'task_completed';
+    } else if (body.status && body.status !== 'completed') {
+      // If status is explicitly being changed to something other than completed, clear completion fields
+      body.completed_at = null;
+      body.completed_by = null;
     }
 
     const updated = await supabaseRest<Task[]>(
@@ -54,6 +60,11 @@ export async function PATCH(
         status: body.status || undefined,
       },
     });
+
+    // Trigger automations on task completion (fire-and-forget)
+    if (body.status === 'completed') {
+      evaluateAutomations(id, { type: 'task_completed', task_id: taskId }).catch(console.error);
+    }
 
     return NextResponse.json(updated[0]);
   } catch (err) {

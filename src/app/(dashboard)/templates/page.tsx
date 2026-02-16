@@ -2,34 +2,70 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, LayoutTemplate, Loader2, ChevronRight } from 'lucide-react';
+import { Plus, LayoutTemplate, Loader2, ChevronRight, Copy, MoreVertical, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { toast } from 'sonner';
+import { apiFetch } from '@/lib/hooks';
 import type { Template } from '@/lib/types';
-
-function getApiKey(): string {
-  if (typeof window !== 'undefined') return sessionStorage.getItem('admin_api_key') || '';
-  return '';
-}
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch('/api/templates', { headers: { 'X-API-Key': getApiKey() } });
-        if (res.ok) setTemplates(await res.json());
-      } catch (err) {
-        console.error('Failed to load templates:', err);
-      } finally {
-        setLoading(false);
-      }
+  async function loadTemplates() {
+    try {
+      const data = await apiFetch<Template[]>('/api/templates');
+      setTemplates(data);
+    } catch (err) {
+      console.error('Failed to load templates:', err);
+      toast.error('Failed to load templates');
+    } finally {
+      setLoading(false);
     }
-    load();
+  }
+
+  useEffect(() => {
+    loadTemplates();
   }, []);
+
+  async function handleDuplicate(template: Template, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      const duplicated = await apiFetch<Template>(
+        `/api/templates?duplicate=true&source_id=${template.id}`,
+        { method: 'POST' },
+      );
+      toast.success(`Template "${template.name}" duplicated`);
+      setTemplates((prev) => [duplicated, ...prev]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate template');
+    }
+  }
+
+  async function handleDelete(template: Template, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!confirm(`Are you sure you want to delete "${template.name}"?`)) return;
+
+    try {
+      await apiFetch(`/api/templates/${template.id}`, { method: 'DELETE' });
+      toast.success('Template deleted');
+      setTemplates((prev) => prev.filter((t) => t.id !== template.id));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete template');
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -38,6 +74,12 @@ export default function TemplatesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Onboarding Templates</h1>
           <p className="text-sm text-gray-500 mt-1">Reusable project blueprints with predefined tasks</p>
         </div>
+        <Link href="/templates/new">
+          <Button className="bg-[#00c9e3] hover:bg-[#00b3cc] text-white">
+            <Plus className="h-4 w-4 mr-2" />
+            New Template
+          </Button>
+        </Link>
       </div>
 
       {loading ? (
@@ -52,14 +94,27 @@ export default function TemplatesPage() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {templates.map((t) => (
-            <Link key={t.id} href={`/templates/${t.id}`}>
-              <Card className="p-5 hover:shadow-md transition-shadow cursor-pointer">
+          {templates.map((t) => {
+            const taskCount = t.tasks?.length || 0;
+
+            return (
+              <Card key={t.id} className="p-5 hover:shadow-md transition-shadow group">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <Link href={`/templates/${t.id}`} className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-gray-900">{t.name}</h3>
-                      {!t.is_active && <Badge variant="outline" className="text-gray-400">Inactive</Badge>}
+                      {t.is_active ? (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-600 border-emerald-200">
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-gray-400">Inactive</Badge>
+                      )}
+                      {taskCount > 0 && (
+                        <Badge variant="outline" className="text-gray-500">
+                          {taskCount} {taskCount === 1 ? 'task' : 'tasks'}
+                        </Badge>
+                      )}
                     </div>
                     {t.description && (
                       <p className="text-sm text-gray-500 mt-1 line-clamp-1">{t.description}</p>
@@ -67,12 +122,35 @@ export default function TemplatesPage() {
                     <p className="text-xs text-gray-400 mt-1">
                       {t.estimated_days ? `${t.estimated_days} days estimated` : 'No estimate'}
                     </p>
+                  </Link>
+
+                  <div className="flex items-center gap-2">
+                    <ChevronRight className="h-5 w-5 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={(e) => handleDuplicate(t, e)}>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => handleDelete(t, e)}
+                          className="text-red-600 focus:text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  <ChevronRight className="h-5 w-5 text-gray-300" />
                 </div>
               </Card>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

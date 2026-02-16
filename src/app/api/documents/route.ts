@@ -5,7 +5,9 @@ import type { Document } from '@/lib/types';
 
 /**
  * GET /api/documents — List document templates
- * Supports ?active_only=true
+ * Supports:
+ * - ?active_only=true (filter by is_active)
+ * - ?category=agreement|disclosure|authorization (filter by category)
  */
 export async function GET(req: NextRequest) {
   const authError = validateApiKey(req);
@@ -17,6 +19,14 @@ export async function GET(req: NextRequest) {
     const activeOnly = req.nextUrl.searchParams.get('active_only');
     if (activeOnly === 'true') {
       path += '&is_active=eq.true';
+    }
+
+    const category = req.nextUrl.searchParams.get('category');
+    if (category) {
+      const validCategories = ['agreement', 'disclosure', 'authorization'];
+      if (validCategories.includes(category)) {
+        path += `&category=eq.${category}`;
+      }
     }
 
     const documents = await supabaseRest<Document[]>(path);
@@ -41,7 +51,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    const { name, description, template_url, category, requires_signature } = body;
+    const { name, description, template_url, category, requires_signature, is_active } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'name is required' }, { status: 400 });
@@ -53,6 +63,7 @@ export async function POST(req: NextRequest) {
       template_url: template_url || null,
       category: category || 'agreement',
       requires_signature: requires_signature ?? false,
+      is_active: is_active ?? true,
     };
 
     const [created] = await supabaseRest<Document[]>('onboarding_documents', {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest, supabaseStorageUpload } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
 import { validatePortalToken } from '@/lib/auth';
+import { evaluateAutomations } from '@/lib/automation-engine';
 import type { OnboardingFile } from '@/lib/types';
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
@@ -177,6 +178,9 @@ export async function POST(
         file_type: file.type,
       },
     });
+
+    // Trigger automations on file upload (fire-and-forget)
+    evaluateAutomations(project.id, { type: 'file_uploaded', file_id: fileRecord.id }).catch(console.error);
 
     return NextResponse.json(fileRecord, { status: 201 });
   } catch (err) {

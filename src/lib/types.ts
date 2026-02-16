@@ -28,6 +28,8 @@ export interface TemplateTask {
   requires_file_upload: boolean;
   requires_signature: boolean;
   depends_on: string | null;
+  stage_id: string | null;
+  due_days_offset: number | null;
   created_at: string;
 }
 
@@ -52,6 +54,7 @@ export interface Project {
   started_at: string | null;
   target_completion_date: string | null;
   completed_at: string | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +82,10 @@ export interface Task {
   depends_on: string | null;
   staff_notes: string | null;
   client_notes: string | null;
+  due_date: string | null;
+  stage_id: string | null;
+  checklist: ChecklistItem[];
+  due_date_reminder: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -174,6 +181,93 @@ export interface ActivityLog {
   created_at: string;
 }
 
+// --- Stages ---
+
+export interface Stage {
+  id: string;
+  template_id: string | null;
+  project_id: string | null;
+  name: string;
+  description: string | null;
+  order_index: number;
+  status: StageStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export type StageStatus = 'pending' | 'active' | 'completed' | 'archived';
+
+// --- Tags ---
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+export interface ProjectTag {
+  project_id: string;
+  tag_id: string;
+}
+
+// --- Checklist ---
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+}
+
+// --- Automations ---
+
+export interface Automation {
+  id: string;
+  template_id: string;
+  name: string;
+  is_active: boolean;
+  trigger_type: AutomationTriggerType;
+  trigger_config: Record<string, unknown>;
+  action_type: AutomationActionType;
+  action_config: Record<string, unknown>;
+  delay_minutes: number;
+  order_index: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AutomationTriggerType = 'task_completed' | 'stage_completed' | 'project_created' | 'file_uploaded' | 'signature_signed';
+export type AutomationActionType = 'activate_task' | 'complete_task' | 'activate_stage' | 'complete_stage' | 'send_email' | 'update_project_status';
+
+// --- Automation Log ---
+
+export interface AutomationLog {
+  id: string;
+  automation_id: string;
+  project_id: string;
+  trigger_event: Record<string, unknown> | null;
+  action_result: Record<string, unknown> | null;
+  status: 'success' | 'failed' | 'skipped';
+  error_message: string | null;
+  executed_at: string;
+}
+
+// --- Email Log ---
+
+export interface EmailLog {
+  id: string;
+  project_id: string | null;
+  template_type: string;
+  recipient_email: string;
+  recipient_name: string | null;
+  subject: string;
+  resend_id: string | null;
+  status: 'sent' | 'delivered' | 'failed' | 'bounced';
+  error_message: string | null;
+  metadata: Record<string, unknown> | null;
+  sent_at: string;
+}
+
 // --- API Responses ---
 
 export interface ProjectSummary {
@@ -187,6 +281,8 @@ export interface ProjectSummary {
   total_tasks: number;
   completed_tasks: number;
   days_active: number | null;
+  tags: Tag[];
+  overdue_tasks: number;
   created_at: string;
 }
 
@@ -196,8 +292,9 @@ export interface PortalView {
     'id' | 'name' | 'status' | 'community_name' | 'client_company_name' | 'client_contact_name' | 'management_start_date'
   >;
   tasks: Array<
-    Pick<Task, 'id' | 'title' | 'description' | 'category' | 'status' | 'requires_file_upload' | 'requires_signature' | 'client_notes' | 'order_index'>
+    Pick<Task, 'id' | 'title' | 'description' | 'category' | 'status' | 'requires_file_upload' | 'requires_signature' | 'client_notes' | 'order_index' | 'due_date' | 'stage_id' | 'checklist'>
   >;
+  stages: Array<Pick<Stage, 'id' | 'name' | 'order_index' | 'status'>>;
   progress: number;
   total_tasks: number;
   completed_tasks: number;
@@ -212,6 +309,9 @@ export interface DashboardStats {
   avg_completion_days: number | null;
   pending_signatures: number;
   pending_uploads: number;
+  overdue_tasks: number;
+  pending_tasks: number;
+  avg_completion_percent: number;
 }
 
 export interface CrmProjectSummary {

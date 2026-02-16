@@ -56,6 +56,8 @@ export async function POST(
       requires_file_upload,
       requires_signature,
       depends_on,
+      stage_id,
+      due_date,
     } = body;
 
     if (!title) {
@@ -74,6 +76,8 @@ export async function POST(
       requires_file_upload: requires_file_upload ?? false,
       requires_signature: requires_signature ?? false,
       depends_on: depends_on || null,
+      stage_id: stage_id || null,
+      due_date: due_date || null,
     };
 
     const [created] = await supabaseRest<Task[]>('onboarding_tasks', {

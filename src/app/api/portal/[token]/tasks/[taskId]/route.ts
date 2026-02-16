@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
 import { validatePortalToken } from '@/lib/auth';
+import { evaluateAutomations } from '@/lib/automation-engine';
 import type { Task } from '@/lib/types';
 
 /**
@@ -117,6 +118,11 @@ export async function PATCH(
         action: activity.action,
         details: activity.details,
       });
+    }
+
+    // Trigger automations on task completion (fire-and-forget)
+    if (body.status === 'completed') {
+      evaluateAutomations(project.id, { type: 'task_completed', task_id: taskId }).catch(console.error);
     }
 
     return NextResponse.json(updated[0] || updates);

@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
         'onboarding_signatures?select=id&status=in.(pending,sent)',
       ),
       supabaseRest<Task[]>(
-        'onboarding_tasks?select=id,project_id,status,requires_file_upload',
+        'onboarding_tasks?select=id,project_id,status,requires_file_upload,due_date',
       ),
     ]);
 
@@ -55,6 +55,41 @@ export async function GET(req: NextRequest) {
         activeProjectIds.has(t.project_id),
     ).length;
 
+    // Count overdue and pending tasks across active projects
+    const now = new Date();
+    const overdueTasks = allTasks.filter(
+      (t) =>
+        t.status !== 'completed' &&
+        t.status !== 'skipped' &&
+        t.due_date &&
+        new Date(t.due_date) < now &&
+        activeProjectIds.has(t.project_id),
+    ).length;
+
+    const pendingTasks = allTasks.filter(
+      (t) =>
+        t.status === 'pending' &&
+        activeProjectIds.has(t.project_id),
+    ).length;
+
+    // Calculate average completion percentage across active projects
+    const activeTasksByProject: Record<string, { total: number; completed: number }> = {};
+    for (const t of allTasks) {
+      if (!activeProjectIds.has(t.project_id)) continue;
+      if (!activeTasksByProject[t.project_id]) {
+        activeTasksByProject[t.project_id] = { total: 0, completed: 0 };
+      }
+      activeTasksByProject[t.project_id].total++;
+      if (t.status === 'completed') activeTasksByProject[t.project_id].completed++;
+    }
+    const projectCompletions = Object.values(activeTasksByProject);
+    const avgCompletionPercent = projectCompletions.length > 0
+      ? Math.round(
+          projectCompletions.reduce((sum, p) => sum + (p.total > 0 ? (p.completed / p.total) * 100 : 0), 0) /
+            projectCompletions.length,
+        )
+      : 0;
+
     const stats: DashboardStats = {
       total_projects: totalProjects,
       active_projects: activeProjects,
@@ -62,6 +97,9 @@ export async function GET(req: NextRequest) {
       avg_completion_days: avgCompletionDays,
       pending_signatures: pendingSignatures.length,
       pending_uploads: pendingUploads,
+      overdue_tasks: overdueTasks,
+      pending_tasks: pendingTasks,
+      avg_completion_percent: avgCompletionPercent,
     };
 
     return NextResponse.json(stats);

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseRest } from '@/lib/supabase';
+import { supabaseRest, supabaseStorageDownload, supabaseStorageUpload } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
 import { validatePortalToken } from '@/lib/auth';
-import type { Signature, Task } from '@/lib/types';
+import { evaluateAutomations } from '@/lib/automation-engine';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import type { Signature, Task, Document } from '@/lib/types';
 
 const CONSENT_TEXT =
   'I agree to sign this document electronically and acknowledge that my electronic signature has the same legal effect as a handwritten signature.';
@@ -143,6 +145,25 @@ export async function POST(
       },
     );
 
+    // Generate signed PDF if signature has a document
+    if (signature.document_id) {
+      try {
+        await generateSignedPdf(
+          signature.document_id,
+          sigId,
+          body.signature_type,
+          body.signature_data,
+          body.typed_name,
+          body.signer_name,
+          now,
+          ipAddress,
+        );
+      } catch (pdfErr) {
+        // Non-fatal — signature was recorded, PDF generation is enhancement
+        console.error('[portal/sign] Failed to generate signed PDF:', pdfErr);
+      }
+    }
+
     // Insert audit record
     await supabaseRest(
       'onboarding_signature_audit',
@@ -215,9 +236,126 @@ export async function POST(
       },
     });
 
+    // Trigger automations on signature (fire-and-forget)
+    evaluateAutomations(project.id, { type: 'signature_signed', signature_id: sigId }).catch(console.error);
+
     return NextResponse.json(updatedSignature);
   } catch (err) {
     console.error('[portal/sign] Failed to process signature:', err);
     return NextResponse.json({ error: 'Failed to process signature' }, { status: 500 });
   }
+}
+
+/**
+ * Generate a signed PDF with embedded signature
+ */
+async function generateSignedPdf(
+  documentId: string,
+  signatureId: string,
+  signatureType: 'draw' | 'type',
+  signatureData?: string,
+  typedName?: string,
+  signerName?: string,
+  signedAt?: string,
+  ipAddress?: string,
+): Promise<void> {
+  // Fetch document record
+  const documents = await supabaseRest<Document[]>(
+    `onboarding_documents?id=eq.${documentId}&select=*&limit=1`,
+  );
+
+  if (!documents.length || !documents[0].template_url) {
+    console.warn('[generateSignedPdf] No document or template_url found');
+    return;
+  }
+
+  const document = documents[0];
+
+  if (!document.template_url) {
+    console.warn('[generateSignedPdf] Document has no template URL');
+    return;
+  }
+
+  // Download original PDF from storage
+  const pdfBytes = await supabaseStorageDownload('onboarding-files', document.template_url);
+
+  // Load PDF with pdf-lib
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const pages = pdfDoc.getPages();
+  const lastPage = pages[pages.length - 1];
+  const { width, height } = lastPage.getSize();
+
+  // Embed signature
+  if (signatureType === 'draw' && signatureData) {
+    // Decode base64 PNG and embed as image
+    const base64Data = signatureData.split(',')[1] || signatureData;
+    const pngBytes = Buffer.from(base64Data, 'base64');
+    const pngImage = await pdfDoc.embedPng(pngBytes);
+
+    const pngDims = pngImage.scale(0.3); // Scale to 30% of original size
+    const xPos = 50;
+    const yPos = 120;
+
+    lastPage.drawImage(pngImage, {
+      x: xPos,
+      y: yPos,
+      width: pngDims.width,
+      height: pngDims.height,
+    });
+  } else if (signatureType === 'type' && typedName) {
+    // Draw typed name in a cursive-like font (using Helvetica as fallback)
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    lastPage.drawText(typedName, {
+      x: 50,
+      y: 130,
+      size: 24,
+      font,
+      color: rgb(0, 0, 0),
+    });
+  }
+
+  // Add annotation text below signature
+  const annotFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const signedDate = signedAt ? new Date(signedAt).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  }) : new Date().toLocaleString();
+
+  const annotationText = `Electronically signed by ${signerName || 'Unknown'} on ${signedDate} | IP: ${ipAddress || 'unknown'}`;
+
+  lastPage.drawText(annotationText, {
+    x: 50,
+    y: 100,
+    size: 8,
+    font: annotFont,
+    color: rgb(0.4, 0.4, 0.4),
+  });
+
+  // Save the modified PDF
+  const signedPdfBytes = await pdfDoc.save();
+
+  // Upload signed PDF to storage
+  const signedPdfPath = `onboarding-files/signed/${signatureId}.pdf`;
+  await supabaseStorageUpload(
+    'onboarding-files',
+    signedPdfPath,
+    signedPdfBytes,
+    'application/pdf',
+  );
+
+  // Update signature record with signed_pdf_path
+  await supabaseRest(
+    `onboarding_signatures?id=eq.${signatureId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ signed_pdf_path: signedPdfPath }),
+      prefer: 'return=minimal',
+    },
+  );
+
+  console.log(`[generateSignedPdf] Signed PDF generated: ${signedPdfPath}`);
 }

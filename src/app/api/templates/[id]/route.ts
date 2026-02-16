@@ -94,3 +94,39 @@ export async function PATCH(
     );
   }
 }
+
+/**
+ * DELETE /api/templates/[id] — Soft-delete template (set is_active=false)
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const authError = validateApiKey(req);
+  if (authError) return authError;
+
+  try {
+    const { id } = await params;
+
+    const updated = await supabaseRest<Template[]>(
+      `onboarding_templates?id=eq.${encodeURIComponent(id)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: false }),
+        prefer: 'return=representation',
+      },
+    );
+
+    if (!updated.length) {
+      return NextResponse.json({ error: 'Template not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(updated[0]);
+  } catch (err) {
+    console.error('[api/templates/[id]] DELETE error:', err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Internal server error' },
+      { status: 500 },
+    );
+  }
+}

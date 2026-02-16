@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseRest } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
-import type { Signature } from '@/lib/types';
+import { sendSignatureRequest } from '@/lib/email';
+import type { Signature, Project, Document } from '@/lib/types';
 
 /**
  * GET /api/projects/[id]/signatures — List signatures for a project
@@ -74,6 +75,38 @@ export async function POST(
       body: JSON.stringify(signaturePayload),
       prefer: 'return=representation',
     });
+
+    // Send signature request email if signer has email
+    if (signer_email) {
+      // Fetch project for portal token and name
+      const [project] = await supabaseRest<Project[]>(
+        `onboarding_projects?id=eq.${encodeURIComponent(id)}&select=name,public_token`,
+      );
+
+      if (project) {
+        // Fetch document name if document_id provided
+        let documentName: string | undefined;
+        if (document_id) {
+          const [doc] = await supabaseRest<Document[]>(
+            `onboarding_documents?id=eq.${encodeURIComponent(document_id)}&select=name`,
+          );
+          documentName = doc?.name;
+        }
+
+        // Send email (fire-and-forget)
+        sendSignatureRequest({
+          to: signer_email,
+          signerName: signer_name,
+          projectName: project.name,
+          documentName,
+          portalToken: project.public_token,
+          signatureId: created.id,
+          project_id: id,
+        }).catch((err) => {
+          console.error('[signatures] Failed to send signature request email:', err);
+        });
+      }
+    }
 
     // Log activity (fire-and-forget)
     logActivity({

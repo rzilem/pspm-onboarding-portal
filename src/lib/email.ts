@@ -178,37 +178,55 @@ export async function sendClientInvite(params: {
 }
 
 /**
- * 2. Task Reminder Email
+ * 2. Task Reminder Email (with overdue/upcoming split)
  */
 export async function sendTaskReminder(params: {
   to: string;
   clientName: string;
   projectName: string;
-  pendingTasks: Array<{ title: string; due_date?: string }>;
+  pendingTasks: Array<{ title: string; due_date?: string; is_overdue?: boolean }>;
   portalToken: string;
   project_id: string;
+  overdueTasks?: number;
+  subject?: string;
 }): Promise<{ id: string } | null> {
   const portalUrl = `${BASE_URL}/p/${params.portalToken}`;
+  const overdue = params.pendingTasks.filter((t) => t.is_overdue);
+  const upcoming = params.pendingTasks.filter((t) => !t.is_overdue);
   const taskCount = params.pendingTasks.length;
 
-  const taskListHtml = params.pendingTasks.slice(0, 5).map(task => {
-    const dueText = task.due_date ? ` — <span style="color:#d97706;">Due ${new Date(task.due_date).toLocaleDateString()}</span>` : '';
-    return `<li style="margin:8px 0;color:#374151;">${task.title}${dueText}</li>`;
-  }).join('');
+  const overdueHtml = overdue.length > 0 ? `
+<div style="border:2px solid #ef4444;border-radius:8px;padding:16px;margin:24px 0;background:#fef2f2;">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#b91c1c;font-weight:600;">Overdue Tasks (${overdue.length})</h3>
+  <ul style="margin:0;padding-left:20px;">
+    ${overdue.slice(0, 5).map(task => {
+      const dueText = task.due_date ? ` — <span style="color:#b91c1c;">Due ${new Date(task.due_date).toLocaleDateString()}</span>` : '';
+      return `<li style="margin:8px 0;color:#374151;">${task.title}${dueText}</li>`;
+    }).join('')}
+    ${overdue.length > 5 ? `<li style="color:#6b7280;margin:8px 0;">...and ${overdue.length - 5} more</li>` : ''}
+  </ul>
+</div>` : '';
+
+  const upcomingHtml = upcoming.length > 0 ? `
+<div style="background:#f9fafb;border-left:4px solid #00c9e3;padding:16px;margin:24px 0;">
+  <h3 style="margin:0 0 12px;font-size:14px;color:#111827;">Upcoming Tasks (${upcoming.length})</h3>
+  <ul style="margin:0;padding-left:20px;">
+    ${upcoming.slice(0, 5).map(task => {
+      const dueText = task.due_date ? ` — <span style="color:#d97706;">Due ${new Date(task.due_date).toLocaleDateString()}</span>` : '';
+      return `<li style="margin:8px 0;color:#374151;">${task.title}${dueText}</li>`;
+    }).join('')}
+    ${upcoming.length > 5 ? `<li style="color:#6b7280;margin:8px 0;">...and ${upcoming.length - 5} more</li>` : ''}
+  </ul>
+</div>` : '';
 
   const content = `
 <h2 style="color:#111827;margin:0 0 16px;font-size:18px;">You Have ${taskCount} Pending Task${taskCount === 1 ? '' : 's'}</h2>
 <p style="color:#374151;margin:0 0 16px;line-height:1.6;">Hi ${params.clientName},</p>
 <p style="color:#374151;margin:0 0 16px;line-height:1.6;">
-  This is a friendly reminder that you have <strong>${taskCount} pending task${taskCount === 1 ? '' : 's'}</strong> for <strong>${params.projectName}</strong>.
+  This is a friendly reminder about your pending tasks for <strong>${params.projectName}</strong>.
 </p>
-<div style="background:#f9fafb;border-left:4px solid #00c9e3;padding:16px;margin:24px 0;">
-  <h3 style="margin:0 0 12px;font-size:14px;color:#111827;">Pending Tasks:</h3>
-  <ul style="margin:0;padding-left:20px;">
-    ${taskListHtml}
-    ${taskCount > 5 ? `<li style="color:#6b7280;margin:8px 0;">...and ${taskCount - 5} more</li>` : ''}
-  </ul>
-</div>
+${overdueHtml}
+${upcomingHtml}
 <div style="text-align:center;margin:24px 0;">
   ${emailButton('View All Tasks', portalUrl)}
 </div>
@@ -220,9 +238,11 @@ export async function sendTaskReminder(params: {
   <strong>PS Property Management Team</strong>
 </p>`;
 
+  const subject = params.subject || `${taskCount} Pending Task${taskCount === 1 ? '' : 's'} — ${params.projectName}`;
+
   return sendEmail({
     to: params.to,
-    subject: `${taskCount} Pending Task${taskCount === 1 ? '' : 's'} — ${params.projectName}`,
+    subject,
     html: emailTemplate(content),
     project_id: params.project_id,
     template_type: 'task_reminder',

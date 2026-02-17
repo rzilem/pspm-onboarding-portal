@@ -7,7 +7,7 @@ import {
   ArrowLeft, ExternalLink, Copy, Check, FileUp, PenLine,
   Clock, User, Building2, Loader2, AlertCircle, Plus,
   ChevronDown, ChevronRight, Trash2, Search, X, CalendarIcon,
-  CheckCircle2, Circle, Download, Upload, Mail,
+  CheckCircle2, Circle, Download, Upload, Mail, MessageSquare, Files,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -28,7 +28,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { formatDate, formatDateTime, statusColor, calcProgress, categoryLabel, cn } from '@/lib/utils';
-import type { Project, Task, OnboardingFile, Signature, ActivityLog, Stage, ChecklistItem, Document, TaskStatus, Tag } from '@/lib/types';
+import type { Project, Task, OnboardingFile, Signature, ActivityLog, Stage, ChecklistItem, Document, TaskStatus, Tag, Comment } from '@/lib/types';
 import { toast } from 'sonner';
 import { apiFetch, getApiKey } from '@/lib/hooks';
 
@@ -98,6 +98,11 @@ export default function ProjectDetailPage() {
   const [projectTags, setProjectTags] = useState<Tag[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [tagPopoverOpen, setTagPopoverOpen] = useState(false);
+
+  // Duplicate project state
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateName, setDuplicateName] = useState('');
+  const [duplicating, setDuplicating] = useState(false);
 
   const headers = { 'X-API-Key': getApiKey() };
 
@@ -449,6 +454,23 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleDuplicate() {
+    setDuplicating(true);
+    try {
+      const result = await apiFetch<Project>(`/api/projects/${projectId}/duplicate`, {
+        method: 'POST',
+        body: { name: duplicateName || undefined },
+      });
+      toast.success('Project duplicated');
+      setDuplicateOpen(false);
+      router.push(`/projects/${result.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to duplicate');
+    } finally {
+      setDuplicating(false);
+    }
+  }
+
   function toggleStageCollapse(stageId: string) {
     setCollapsedStages((prev) => {
       const next = new Set(prev);
@@ -601,6 +623,17 @@ export default function ProjectDetailPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setDuplicateName(`${project.name} (Copy)`);
+              setDuplicateOpen(true);
+            }}
+          >
+            <Files className="h-4 w-4 mr-1" />
+            Duplicate
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1322,6 +1355,44 @@ export default function ProjectDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Project Dialog */}
+      <Dialog open={duplicateOpen} onOpenChange={setDuplicateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Duplicate Project</DialogTitle>
+            <DialogDescription>
+              Create a copy of this project with all tasks and stages. Files, signatures, and activity history will not be copied.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="duplicate-name">Project Name</Label>
+              <Input
+                id="duplicate-name"
+                value={duplicateName}
+                onChange={(e) => setDuplicateName(e.target.value)}
+                placeholder="New project name"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDuplicateOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleDuplicate} disabled={duplicating}>
+              {duplicating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  Duplicating...
+                </>
+              ) : (
+                'Duplicate Project'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1351,7 +1422,53 @@ function TaskRow({
   });
   const [newChecklistItem, setNewChecklistItem] = useState('');
 
+  // Comments state
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [isInternal, setIsInternal] = useState(false);
+  const [commentCount, setCommentCount] = useState(0);
+
   const isOverdue = task.due_date && task.status !== 'completed' && new Date(task.due_date) < new Date();
+
+  async function loadComments() {
+    if (commentsLoaded) return;
+    setCommentsLoading(true);
+    try {
+      const data = await apiFetch<Comment[]>(`/api/projects/${projectId}/tasks/${task.id}/comments`);
+      setComments(data);
+      setCommentCount(data.length);
+      setCommentsLoaded(true);
+    } catch (err) {
+      console.error('Failed to load comments:', err);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function submitComment() {
+    if (!newComment.trim()) return;
+    try {
+      await apiFetch(`/api/projects/${projectId}/tasks/${task.id}/comments`, {
+        method: 'POST',
+        body: { content: newComment, is_internal: isInternal },
+      });
+      setNewComment('');
+      setIsInternal(false);
+      setCommentsLoaded(false);
+      loadComments();
+      toast.success('Comment added');
+    } catch (err) {
+      toast.error('Failed to add comment');
+    }
+  }
+
+  useEffect(() => {
+    if (expanded && !commentsLoaded) {
+      loadComments();
+    }
+  }, [expanded]);
 
   function handleSave() {
     onUpdate(task.id, editData);
@@ -1456,6 +1573,13 @@ function TaskRow({
             {task.checklist.length > 0 && (
               <div className="text-xs text-gray-500">
                 {completedChecklistCount}/{task.checklist.length} items
+              </div>
+            )}
+
+            {commentCount > 0 && (
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <MessageSquare className="h-3 w-3" />
+                {commentCount}
               </div>
             )}
           </div>
@@ -1570,6 +1694,72 @@ function TaskRow({
                     </Button>
                   </div>
                 </div>
+              </div>
+
+              {/* Comments */}
+              <div>
+                <Label className="text-xs flex items-center gap-1">
+                  <MessageSquare className="h-3 w-3" />
+                  Comments {commentCount > 0 && `(${commentCount})`}
+                </Label>
+                {commentsLoading ? (
+                  <div className="flex items-center gap-2 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span className="text-xs text-gray-500">Loading...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2 mt-2">
+                    {comments.map((c) => (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          'rounded-md p-2 text-sm',
+                          c.is_internal ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50',
+                        )}
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-medium text-xs">{c.author_name}</span>
+                          {c.is_internal && (
+                            <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-700 border-amber-300">
+                              Internal
+                            </Badge>
+                          )}
+                          <span className="text-[10px] text-gray-400 ml-auto">
+                            {formatDateTime(c.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-gray-700 text-xs">{c.content}</p>
+                      </div>
+                    ))}
+                    <div className="flex gap-2">
+                      <Input
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            submitComment();
+                          }
+                        }}
+                        placeholder="Add a comment..."
+                        className="text-sm"
+                      />
+                      <div className="flex items-center gap-1">
+                        <Checkbox
+                          id={`internal-${task.id}`}
+                          checked={isInternal}
+                          onCheckedChange={(v) => setIsInternal(!!v)}
+                        />
+                        <Label htmlFor={`internal-${task.id}`} className="text-[10px] text-gray-500 whitespace-nowrap">
+                          Internal
+                        </Label>
+                      </div>
+                      <Button size="sm" onClick={submitComment} disabled={!newComment.trim()}>
+                        Post
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 pt-2">

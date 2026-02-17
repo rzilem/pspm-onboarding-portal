@@ -44,15 +44,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: 'No active projects with client emails', sent: 0 });
     }
 
+    const today = new Date().toISOString().split('T')[0];
     const threeDaysFromNow = new Date();
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
     const threeDaysISO = threeDaysFromNow.toISOString().split('T')[0];
 
     const projectIds = projects.map((p) => p.id);
 
-    // Get all external pending tasks with due dates within 3 days or overdue
+    // Get all external pending/in_progress tasks with due dates
     const allTasks = await supabaseRest<Task[]>(
-      `onboarding_tasks?project_id=in.(${projectIds.join(',')})&visibility=eq.external&status=eq.pending&due_date=not.is.null&due_date=lte.${threeDaysISO}&select=*&order=due_date.asc`,
+      `onboarding_tasks?project_id=in.(${projectIds.join(',')})&visibility=eq.external&status=in.(pending,in_progress,waiting_client)&due_date=not.is.null&due_date=lte.${threeDaysISO}&select=*&order=due_date.asc`,
     );
 
     // Group tasks by project
@@ -68,10 +69,21 @@ export async function POST(req: NextRequest) {
       const tasks = tasksByProject.get(project.id);
       if (!tasks || tasks.length === 0) continue;
 
+      // Split into overdue and upcoming
+      const overdueTasks = tasks.filter((t) => t.due_date && t.due_date < today);
+      const upcomingTasks = tasks.filter((t) => t.due_date && t.due_date >= today);
+
       const pendingTasks = tasks.map((t) => ({
         title: t.title,
         due_date: t.due_date || undefined,
+        is_overdue: t.due_date ? t.due_date < today : false,
       }));
+
+      // Build enhanced subject line
+      const parts: string[] = [];
+      if (overdueTasks.length > 0) parts.push(`${overdueTasks.length} Overdue`);
+      if (upcomingTasks.length > 0) parts.push(`${upcomingTasks.length} Upcoming`);
+      const subjectPrefix = parts.join(' + ');
 
       const result = await sendTaskReminder({
         to: project.client_contact_email!,
@@ -80,13 +92,17 @@ export async function POST(req: NextRequest) {
         pendingTasks,
         portalToken: project.public_token,
         project_id: project.id,
+        overdueTasks: overdueTasks.length,
+        subject: `${subjectPrefix} Tasks — ${project.name}`,
       });
 
       results.push({
         project_id: project.id,
         project_name: project.name,
         client_email: project.client_contact_email,
-        task_count: tasks.length,
+        overdue_count: overdueTasks.length,
+        upcoming_count: upcomingTasks.length,
+        total_tasks: tasks.length,
         sent: !!result,
         email_id: result?.id || null,
       });

@@ -1485,6 +1485,7 @@ function TaskRow({
   isDragTarget: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({
     title: task.title,
     description: task.description || '',
@@ -1544,7 +1545,7 @@ function TaskRow({
 
   function handleSave() {
     onUpdate(task.id, editData);
-    setExpanded(false);
+    setEditing(false);
   }
 
   function handleCancel() {
@@ -1555,6 +1556,11 @@ function TaskRow({
       due_date: task.due_date || '',
       checklist: task.checklist || [],
     });
+    setEditing(false);
+  }
+
+  function handleCloseModal() {
+    setEditing(false);
     setExpanded(false);
   }
 
@@ -1670,274 +1676,317 @@ function TaskRow({
             )}
           </div>
 
-          {/* Task Edit Modal */}
-          <Dialog open={expanded} onOpenChange={(open) => { if (!open) handleCancel(); }}>
-            <DialogContent className="max-w-[85vw] sm:max-w-[85vw] w-full max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <div className="flex items-center gap-3">
-                  <Badge variant="outline" className="text-xs">
-                    {categoryLabel(task.category)}
-                  </Badge>
-                  <Badge variant="outline" className={statusColor(task.status)}>
-                    {task.status.replace('_', ' ')}
-                  </Badge>
-                  {task.assignee_type === 'client' && (
-                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
-                      Client Task
+          {/* Task Modal — LaunchBay-inspired */}
+          <Dialog open={expanded} onOpenChange={(open) => { if (!open) handleCloseModal(); }}>
+            <DialogContent className="max-w-[92vw] sm:max-w-[92vw] w-full max-h-[92vh] flex flex-col p-0 gap-0">
+              {/* Header bar */}
+              <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b">
+                <div>
+                  <DialogTitle className="text-2xl font-bold text-gray-900">{task.title}</DialogTitle>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge variant="outline" className={cn('text-xs', statusColor(task.status))}>
+                      {task.status.replace('_', ' ')}
                     </Badge>
-                  )}
-                  {isOverdue && (
-                    <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 text-xs">
-                      Overdue
+                    <Badge variant="outline" className="text-xs">
+                      {categoryLabel(task.category)}
                     </Badge>
-                  )}
-                </div>
-                <DialogTitle className="text-xl font-bold mt-2">{task.title}</DialogTitle>
-              </DialogHeader>
-
-              <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 mt-2">
-                {/* Left column — Instructions & Details */}
-                <div className="space-y-6">
-                  {/* Instructions / Description — prominent display */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Instructions</h3>
-                    {task.description ? (
-                      <div className="bg-gray-50 border rounded-lg p-5">
-                        <div className="prose prose-sm max-w-none">
-                          <p className="text-[15px] leading-relaxed text-gray-800 whitespace-pre-wrap">{task.description}</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-gray-50 border border-dashed rounded-lg p-5 text-center">
-                        <p className="text-sm text-gray-400 italic">No instructions provided for this task</p>
-                      </div>
+                    {task.assignee_type === 'client' && (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                        Client Task
+                      </Badge>
                     )}
-                  </div>
-
-                  {/* Editable description */}
-                  <div>
-                    <Label htmlFor={`task-description-${task.id}`} className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Edit Instructions</Label>
-                    <Textarea
-                      id={`task-description-${task.id}`}
-                      value={editData.description}
-                      onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-                      rows={5}
-                      className="mt-2 text-[15px] leading-relaxed"
-                      placeholder="Add step-by-step instructions for this task..."
-                    />
-                  </div>
-
-                  {/* Staff Notes */}
-                  <div>
-                    <Label htmlFor={`task-staff-notes-${task.id}`} className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Staff Notes</Label>
-                    <Textarea
-                      id={`task-staff-notes-${task.id}`}
-                      value={editData.staff_notes}
-                      onChange={(e) => setEditData({ ...editData, staff_notes: e.target.value })}
-                      rows={3}
-                      className="mt-2 text-sm"
-                      placeholder="Internal notes for staff (not visible to clients)..."
-                    />
-                  </div>
-
-                  {/* Checklist */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Checklist</h3>
-                    <div className="space-y-2">
-                      {editData.checklist.map((item) => (
-                        <div key={item.id} className="flex items-center gap-3 py-1.5 px-3 rounded-md hover:bg-gray-50">
-                          <Checkbox
-                            checked={item.completed}
-                            onCheckedChange={() => toggleChecklistItem(item.id)}
-                          />
-                          <span className={cn('text-sm flex-1', item.completed && 'line-through text-gray-400')}>
-                            {item.text}
-                          </span>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-7 w-7 opacity-0 hover:opacity-100 transition-opacity"
-                            onClick={() => removeChecklistItem(item.id)}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-
-                      <div className="flex items-center gap-2 mt-2">
-                        <Input
-                          value={newChecklistItem}
-                          onChange={(e) => setNewChecklistItem(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              addChecklistItem();
-                            }
-                          }}
-                          placeholder="Add checklist item..."
-                          className="text-sm"
-                        />
-                        <Button size="sm" onClick={addChecklistItem}>
-                          <Plus className="h-3.5 w-3.5 mr-1" />
-                          Add
-                        </Button>
-                      </div>
-                    </div>
+                    {isOverdue && (
+                      <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 text-xs font-medium">
+                        Overdue
+                      </Badge>
+                    )}
+                    {task.due_date && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        Due {format(new Date(task.due_date), 'MMM d, yyyy')}
+                      </span>
+                    )}
+                    <Separator orientation="vertical" className="h-4 mx-1" />
+                    <span className="text-xs text-gray-500 capitalize">{task.assignee_type} · {task.visibility}</span>
+                    {task.requires_file_upload && <FileUp className="h-3.5 w-3.5 text-gray-400" />}
+                    {task.requires_signature && <PenLine className="h-3.5 w-3.5 text-gray-400" />}
                   </div>
                 </div>
+              </div>
 
-                {/* Right column — Metadata & Comments */}
-                <div className="space-y-6">
-                  {/* Task metadata */}
-                  <div className="space-y-4 bg-gray-50 rounded-lg p-4 border">
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Details</h3>
+              {/* Body — two-column: instructions (wide) + comments sidebar (narrow) */}
+              <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[1fr_340px]">
+                {/* Left: Instructions area (scrollable) */}
+                <div className="overflow-y-auto px-8 py-6">
+                  {!editing ? (
+                    /* ── Read-only view (default) ── */
+                    <div className="space-y-6">
+                      {/* Instructions */}
+                      <div className="min-h-[200px]">
+                        {task.description ? (
+                          <div className="text-base leading-[1.8] text-gray-800 whitespace-pre-wrap">
+                            {task.description}
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-48 text-gray-400 italic">
+                            No instructions provided for this task.
+                          </div>
+                        )}
+                      </div>
 
-                    <div>
-                      <Label htmlFor={`task-title-${task.id}`} className="text-xs text-gray-500">Title</Label>
-                      <Input
-                        id={`task-title-${task.id}`}
-                        value={editData.title}
-                        onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                        className="mt-1 text-sm bg-white"
-                      />
+                      {/* Staff Notes (read-only) */}
+                      {task.staff_notes && (
+                        <div className="border-t pt-5">
+                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Staff Notes</h3>
+                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                            {task.staff_notes}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Checklist (interactive even in read mode) */}
+                      {editData.checklist.length > 0 && (
+                        <div className="border-t pt-5">
+                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+                            Checklist ({completedChecklistCount}/{editData.checklist.length})
+                          </h3>
+                          <div className="space-y-1">
+                            {editData.checklist.map((item) => (
+                              <div key={item.id} className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-gray-50 transition-colors">
+                                <Checkbox
+                                  checked={item.completed}
+                                  onCheckedChange={() => toggleChecklistItem(item.id)}
+                                  className="h-5 w-5"
+                                />
+                                <span className={cn('text-[15px]', item.completed && 'line-through text-gray-400')}>
+                                  {item.text}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  ) : (
+                    /* ── Edit mode ── */
+                    <div className="space-y-5">
+                      <div>
+                        <Label htmlFor={`task-title-${task.id}`} className="text-sm font-medium">Title</Label>
+                        <Input
+                          id={`task-title-${task.id}`}
+                          value={editData.title}
+                          onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                          className="mt-1.5 text-base"
+                        />
+                      </div>
 
-                    <div>
-                      <Label htmlFor={`task-due-date-${task.id}`} className="text-xs text-gray-500">Due Date</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            id={`task-due-date-${task.id}`}
-                            variant="outline"
-                            size="sm"
-                            className={cn(
-                              'w-full justify-start text-left font-normal mt-1 bg-white',
-                              !editData.due_date && 'text-muted-foreground',
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {editData.due_date ? format(new Date(editData.due_date), 'PPP') : 'Pick a date'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={editData.due_date ? new Date(editData.due_date) : undefined}
-                            onSelect={(date) =>
-                              setEditData({
-                                ...editData,
-                                due_date: date ? format(date, 'yyyy-MM-dd') : '',
-                              })
-                            }
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <div>
+                        <Label htmlFor={`task-description-${task.id}`} className="text-sm font-medium">Instructions</Label>
+                        <Textarea
+                          id={`task-description-${task.id}`}
+                          value={editData.description}
+                          onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                          rows={12}
+                          className="mt-1.5 text-base leading-[1.8]"
+                          placeholder="Add step-by-step instructions for this task..."
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor={`task-staff-notes-${task.id}`} className="text-sm font-medium">Staff Notes</Label>
+                        <Textarea
+                          id={`task-staff-notes-${task.id}`}
+                          value={editData.staff_notes}
+                          onChange={(e) => setEditData({ ...editData, staff_notes: e.target.value })}
+                          rows={4}
+                          className="mt-1.5 text-sm"
+                          placeholder="Internal notes for staff (not visible to clients)..."
+                        />
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium">Due Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className={cn(
+                                'w-full max-w-xs justify-start text-left font-normal mt-1.5',
+                                !editData.due_date && 'text-muted-foreground',
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {editData.due_date ? format(new Date(editData.due_date), 'PPP') : 'Pick a date'}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                            <Calendar
+                              mode="single"
+                              selected={editData.due_date ? new Date(editData.due_date) : undefined}
+                              onSelect={(date) =>
+                                setEditData({
+                                  ...editData,
+                                  due_date: date ? format(date, 'yyyy-MM-dd') : '',
+                                })
+                              }
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      {/* Checklist editor */}
+                      <div>
+                        <Label className="text-sm font-medium">Checklist</Label>
+                        <div className="space-y-2 mt-2">
+                          {editData.checklist.map((item) => (
+                            <div key={item.id} className="flex items-center gap-3 py-1.5 px-3 rounded-md hover:bg-gray-50 group">
+                              <Checkbox
+                                checked={item.completed}
+                                onCheckedChange={() => toggleChecklistItem(item.id)}
+                              />
+                              <span className={cn('text-sm flex-1', item.completed && 'line-through text-gray-400')}>
+                                {item.text}
+                              </span>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => removeChecklistItem(item.id)}
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={newChecklistItem}
+                              onChange={(e) => setNewChecklistItem(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  addChecklistItem();
+                                }
+                              }}
+                              placeholder="Add checklist item..."
+                              className="text-sm"
+                            />
+                            <Button size="sm" onClick={addChecklistItem}>
+                              <Plus className="h-3.5 w-3.5 mr-1" />
+                              Add
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+                  )}
+                </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-gray-500">Assignee</span>
-                        <p className="font-medium mt-0.5 capitalize">{task.assignee_type}</p>
+                {/* Right sidebar: Comments & Activity */}
+                <div className="border-l bg-gray-50/50 flex flex-col overflow-hidden">
+                  <div className="px-5 pt-5 pb-3">
+                    <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Comments & activity
+                    </h3>
+                  </div>
+
+                  {/* Comment input at top (like LaunchBay) */}
+                  <div className="px-5 pb-4 border-b">
+                    <Textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault();
+                          submitComment();
+                        }
+                      }}
+                      placeholder="Add a comment. @people to notify them."
+                      rows={2}
+                      className="text-sm bg-white"
+                    />
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="flex items-center gap-1.5">
+                        <Checkbox
+                          id={`internal-${task.id}`}
+                          checked={isInternal}
+                          onCheckedChange={(v) => setIsInternal(!!v)}
+                        />
+                        <Label htmlFor={`internal-${task.id}`} className="text-xs text-gray-500 cursor-pointer">
+                          Team Only
+                        </Label>
                       </div>
-                      <div>
-                        <span className="text-gray-500">Visibility</span>
-                        <p className="font-medium mt-0.5 capitalize">{task.visibility}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">File Upload</span>
-                        <p className="font-medium mt-0.5">{task.requires_file_upload ? 'Required' : 'No'}</p>
-                      </div>
-                      <div>
-                        <span className="text-gray-500">Signature</span>
-                        <p className="font-medium mt-0.5">{task.requires_signature ? 'Required' : 'No'}</p>
-                      </div>
+                      <Button
+                        size="sm"
+                        onClick={submitComment}
+                        disabled={!newComment.trim()}
+                        className="bg-[#00c9e3] hover:bg-[#00b0c8] text-white text-xs"
+                      >
+                        Post {isInternal ? 'Privately' : 'Comment'}
+                      </Button>
                     </div>
                   </div>
 
-                  {/* Comments */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
-                      <MessageSquare className="h-4 w-4" />
-                      Comments {commentCount > 0 && `(${commentCount})`}
-                    </h3>
+                  {/* Comments feed (scrollable) */}
+                  <div className="flex-1 overflow-y-auto px-5 py-4">
                     {commentsLoading ? (
                       <div className="flex items-center gap-2 py-4 justify-center">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm text-gray-500">Loading comments...</span>
+                        <span className="text-sm text-gray-500">Loading...</span>
                       </div>
+                    ) : comments.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-6">No comments yet</p>
                     ) : (
-                      <div className="space-y-3">
-                        {comments.length === 0 && (
-                          <p className="text-sm text-gray-400 text-center py-3">No comments yet</p>
-                        )}
-                        <div className="max-h-64 overflow-y-auto space-y-2">
-                          {comments.map((c) => (
-                            <div
-                              key={c.id}
-                              className={cn(
-                                'rounded-lg p-3 text-sm',
-                                c.is_internal ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border',
-                              )}
-                            >
-                              <div className="flex items-center gap-2 mb-1.5">
-                                <span className="font-semibold text-xs">{c.author_name}</span>
+                      <div className="space-y-4">
+                        {comments.map((c) => (
+                          <div key={c.id} className="flex gap-3">
+                            <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-xs font-semibold text-gray-600">
+                              {c.author_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm text-gray-900">{c.author_name}</span>
                                 {c.is_internal && (
                                   <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-700 border-amber-300">
                                     Internal
                                   </Badge>
                                 )}
-                                <span className="text-[10px] text-gray-400 ml-auto">
+                                <span className="text-xs text-gray-400 ml-auto flex-shrink-0">
                                   {formatDateTime(c.created_at)}
                                 </span>
                               </div>
-                              <p className="text-gray-700 text-sm leading-relaxed">{c.content}</p>
+                              <p className="text-sm text-gray-700 mt-1 leading-relaxed">{c.content}</p>
                             </div>
-                          ))}
-                        </div>
-                        <div className="space-y-2 pt-2 border-t">
-                          <Textarea
-                            value={newComment}
-                            onChange={(e) => setNewComment(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                                e.preventDefault();
-                                submitComment();
-                              }
-                            }}
-                            placeholder="Add a comment... (Ctrl+Enter to post)"
-                            rows={2}
-                            className="text-sm"
-                          />
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              <Checkbox
-                                id={`internal-${task.id}`}
-                                checked={isInternal}
-                                onCheckedChange={(v) => setIsInternal(!!v)}
-                              />
-                              <Label htmlFor={`internal-${task.id}`} className="text-xs text-gray-500 cursor-pointer">
-                                Internal only
-                              </Label>
-                            </div>
-                            <Button size="sm" onClick={submitComment} disabled={!newComment.trim()}>
-                              Post Comment
-                            </Button>
                           </div>
-                        </div>
+                        ))}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              <DialogFooter className="mt-6 pt-4 border-t">
-                <Button variant="outline" onClick={handleCancel}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSave} className="bg-[#00c9e3] hover:bg-[#00b0c8] text-white">
-                  Save Changes
-                </Button>
-              </DialogFooter>
+              {/* Footer */}
+              <div className="flex items-center justify-between px-8 py-4 border-t bg-gray-50/80">
+                <div className="text-xs text-gray-400">
+                  {task.completed_at ? `Completed ${formatDateTime(task.completed_at)}` : `Created ${formatDateTime(task.created_at)}`}
+                </div>
+                <div className="flex items-center gap-3">
+                  {editing ? (
+                    <>
+                      <Button variant="outline" onClick={handleCancel}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleSave} className="bg-[#00c9e3] hover:bg-[#00b0c8] text-white">
+                        Save Changes
+                      </Button>
+                    </>
+                  ) : (
+                    <Button variant="outline" onClick={() => setEditing(true)}>
+                      <PenLine className="h-4 w-4 mr-2" />
+                      Edit Task
+                    </Button>
+                  )}
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>

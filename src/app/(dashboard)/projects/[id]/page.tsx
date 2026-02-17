@@ -1670,194 +1670,276 @@ function TaskRow({
             )}
           </div>
 
-          {/* Expanded edit area */}
-          {expanded && (
-            <div className="mt-4 space-y-3 border-t pt-3">
-              <div>
-                <Label htmlFor={`task-title-${task.id}`} className="text-xs">Title</Label>
-                <Input
-                  id={`task-title-${task.id}`}
-                  value={editData.title}
-                  onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                  className="text-sm"
-                />
-              </div>
+          {/* Task Edit Modal */}
+          <Dialog open={expanded} onOpenChange={(open) => { if (!open) handleCancel(); }}>
+            <DialogContent className="max-w-[85vw] sm:max-w-[85vw] w-full max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <div className="flex items-center gap-3">
+                  <Badge variant="outline" className="text-xs">
+                    {categoryLabel(task.category)}
+                  </Badge>
+                  <Badge variant="outline" className={statusColor(task.status)}>
+                    {task.status.replace('_', ' ')}
+                  </Badge>
+                  {task.assignee_type === 'client' && (
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                      Client Task
+                    </Badge>
+                  )}
+                  {isOverdue && (
+                    <Badge variant="outline" className="bg-red-50 text-red-600 border-red-200 text-xs">
+                      Overdue
+                    </Badge>
+                  )}
+                </div>
+                <DialogTitle className="text-xl font-bold mt-2">{task.title}</DialogTitle>
+              </DialogHeader>
 
-              <div>
-                <Label htmlFor={`task-description-${task.id}`} className="text-xs">Description</Label>
-                <Textarea
-                  id={`task-description-${task.id}`}
-                  value={editData.description}
-                  onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-8 mt-2">
+                {/* Left column — Instructions & Details */}
+                <div className="space-y-6">
+                  {/* Instructions / Description — prominent display */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Instructions</h3>
+                    {task.description ? (
+                      <div className="bg-gray-50 border rounded-lg p-5">
+                        <div className="prose prose-sm max-w-none">
+                          <p className="text-[15px] leading-relaxed text-gray-800 whitespace-pre-wrap">{task.description}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-gray-50 border border-dashed rounded-lg p-5 text-center">
+                        <p className="text-sm text-gray-400 italic">No instructions provided for this task</p>
+                      </div>
+                    )}
+                  </div>
 
-              <div>
-                <Label htmlFor={`task-staff-notes-${task.id}`} className="text-xs">Staff Notes</Label>
-                <Textarea
-                  id={`task-staff-notes-${task.id}`}
-                  value={editData.staff_notes}
-                  onChange={(e) => setEditData({ ...editData, staff_notes: e.target.value })}
-                  rows={2}
-                  className="text-sm"
-                  placeholder="Internal notes for staff..."
-                />
-              </div>
-
-              <div>
-                <Label htmlFor={`task-due-date-${task.id}`} className="text-xs">Due Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      id={`task-due-date-${task.id}`}
-                      variant="outline"
-                      size="sm"
-                      className={cn(
-                        'w-full justify-start text-left font-normal',
-                        !editData.due_date && 'text-muted-foreground',
-                      )}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {editData.due_date ? format(new Date(editData.due_date), 'PPP') : 'Pick a date'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar
-                      mode="single"
-                      selected={editData.due_date ? new Date(editData.due_date) : undefined}
-                      onSelect={(date) =>
-                        setEditData({
-                          ...editData,
-                          due_date: date ? format(date, 'yyyy-MM-dd') : '',
-                        })
-                      }
+                  {/* Editable description */}
+                  <div>
+                    <Label htmlFor={`task-description-${task.id}`} className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Edit Instructions</Label>
+                    <Textarea
+                      id={`task-description-${task.id}`}
+                      value={editData.description}
+                      onChange={(e) => setEditData({ ...editData, description: e.target.value })}
+                      rows={5}
+                      className="mt-2 text-[15px] leading-relaxed"
+                      placeholder="Add step-by-step instructions for this task..."
                     />
-                  </PopoverContent>
-                </Popover>
-              </div>
+                  </div>
 
-              {/* Checklist editor */}
-              <div>
-                <Label className="text-xs">Checklist</Label>
-                <div className="space-y-2 mt-2">
-                  {editData.checklist.map((item) => (
-                    <div key={item.id} className="flex items-center gap-2">
-                      <Checkbox
-                        checked={item.completed}
-                        onCheckedChange={() => toggleChecklistItem(item.id)}
-                      />
-                      <span className={cn('text-sm flex-1', item.completed && 'line-through text-gray-400')}>
-                        {item.text}
-                      </span>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6"
-                        onClick={() => removeChecklistItem(item.id)}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                  {/* Staff Notes */}
+                  <div>
+                    <Label htmlFor={`task-staff-notes-${task.id}`} className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Staff Notes</Label>
+                    <Textarea
+                      id={`task-staff-notes-${task.id}`}
+                      value={editData.staff_notes}
+                      onChange={(e) => setEditData({ ...editData, staff_notes: e.target.value })}
+                      rows={3}
+                      className="mt-2 text-sm"
+                      placeholder="Internal notes for staff (not visible to clients)..."
+                    />
+                  </div>
+
+                  {/* Checklist */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Checklist</h3>
+                    <div className="space-y-2">
+                      {editData.checklist.map((item) => (
+                        <div key={item.id} className="flex items-center gap-3 py-1.5 px-3 rounded-md hover:bg-gray-50">
+                          <Checkbox
+                            checked={item.completed}
+                            onCheckedChange={() => toggleChecklistItem(item.id)}
+                          />
+                          <span className={cn('text-sm flex-1', item.completed && 'line-through text-gray-400')}>
+                            {item.text}
+                          </span>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 opacity-0 hover:opacity-100 transition-opacity"
+                            onClick={() => removeChecklistItem(item.id)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <Input
+                          value={newChecklistItem}
+                          onChange={(e) => setNewChecklistItem(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              addChecklistItem();
+                            }
+                          }}
+                          placeholder="Add checklist item..."
+                          className="text-sm"
+                        />
+                        <Button size="sm" onClick={addChecklistItem}>
+                          <Plus className="h-3.5 w-3.5 mr-1" />
+                          Add
+                        </Button>
+                      </div>
                     </div>
-                  ))}
+                  </div>
+                </div>
 
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={newChecklistItem}
-                      onChange={(e) => setNewChecklistItem(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          addChecklistItem();
-                        }
-                      }}
-                      placeholder="Add checklist item..."
-                      className="text-sm"
-                    />
-                    <Button size="sm" onClick={addChecklistItem}>
-                      <Plus className="h-3.5 w-3.5" />
-                    </Button>
+                {/* Right column — Metadata & Comments */}
+                <div className="space-y-6">
+                  {/* Task metadata */}
+                  <div className="space-y-4 bg-gray-50 rounded-lg p-4 border">
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Details</h3>
+
+                    <div>
+                      <Label htmlFor={`task-title-${task.id}`} className="text-xs text-gray-500">Title</Label>
+                      <Input
+                        id={`task-title-${task.id}`}
+                        value={editData.title}
+                        onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                        className="mt-1 text-sm bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor={`task-due-date-${task.id}`} className="text-xs text-gray-500">Due Date</Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            id={`task-due-date-${task.id}`}
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                              'w-full justify-start text-left font-normal mt-1 bg-white',
+                              !editData.due_date && 'text-muted-foreground',
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {editData.due_date ? format(new Date(editData.due_date), 'PPP') : 'Pick a date'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={editData.due_date ? new Date(editData.due_date) : undefined}
+                            onSelect={(date) =>
+                              setEditData({
+                                ...editData,
+                                due_date: date ? format(date, 'yyyy-MM-dd') : '',
+                              })
+                            }
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-gray-500">Assignee</span>
+                        <p className="font-medium mt-0.5 capitalize">{task.assignee_type}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Visibility</span>
+                        <p className="font-medium mt-0.5 capitalize">{task.visibility}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">File Upload</span>
+                        <p className="font-medium mt-0.5">{task.requires_file_upload ? 'Required' : 'No'}</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Signature</span>
+                        <p className="font-medium mt-0.5">{task.requires_signature ? 'Required' : 'No'}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Comments */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4" />
+                      Comments {commentCount > 0 && `(${commentCount})`}
+                    </h3>
+                    {commentsLoading ? (
+                      <div className="flex items-center gap-2 py-4 justify-center">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm text-gray-500">Loading comments...</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {comments.length === 0 && (
+                          <p className="text-sm text-gray-400 text-center py-3">No comments yet</p>
+                        )}
+                        <div className="max-h-64 overflow-y-auto space-y-2">
+                          {comments.map((c) => (
+                            <div
+                              key={c.id}
+                              className={cn(
+                                'rounded-lg p-3 text-sm',
+                                c.is_internal ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50 border',
+                              )}
+                            >
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <span className="font-semibold text-xs">{c.author_name}</span>
+                                {c.is_internal && (
+                                  <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-700 border-amber-300">
+                                    Internal
+                                  </Badge>
+                                )}
+                                <span className="text-[10px] text-gray-400 ml-auto">
+                                  {formatDateTime(c.created_at)}
+                                </span>
+                              </div>
+                              <p className="text-gray-700 text-sm leading-relaxed">{c.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="space-y-2 pt-2 border-t">
+                          <Textarea
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                e.preventDefault();
+                                submitComment();
+                              }
+                            }}
+                            placeholder="Add a comment... (Ctrl+Enter to post)"
+                            rows={2}
+                            className="text-sm"
+                          />
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5">
+                              <Checkbox
+                                id={`internal-${task.id}`}
+                                checked={isInternal}
+                                onCheckedChange={(v) => setIsInternal(!!v)}
+                              />
+                              <Label htmlFor={`internal-${task.id}`} className="text-xs text-gray-500 cursor-pointer">
+                                Internal only
+                              </Label>
+                            </div>
+                            <Button size="sm" onClick={submitComment} disabled={!newComment.trim()}>
+                              Post Comment
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Comments */}
-              <div>
-                <Label className="text-xs flex items-center gap-1">
-                  <MessageSquare className="h-3 w-3" />
-                  Comments {commentCount > 0 && `(${commentCount})`}
-                </Label>
-                {commentsLoading ? (
-                  <div className="flex items-center gap-2 py-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span className="text-xs text-gray-500">Loading...</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2 mt-2">
-                    {comments.map((c) => (
-                      <div
-                        key={c.id}
-                        className={cn(
-                          'rounded-md p-2 text-sm',
-                          c.is_internal ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50',
-                        )}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-xs">{c.author_name}</span>
-                          {c.is_internal && (
-                            <Badge variant="outline" className="text-[10px] bg-amber-100 text-amber-700 border-amber-300">
-                              Internal
-                            </Badge>
-                          )}
-                          <span className="text-[10px] text-gray-400 ml-auto">
-                            {formatDateTime(c.created_at)}
-                          </span>
-                        </div>
-                        <p className="text-gray-700 text-xs">{c.content}</p>
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <Input
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            submitComment();
-                          }
-                        }}
-                        placeholder="Add a comment..."
-                        className="text-sm"
-                      />
-                      <div className="flex items-center gap-1">
-                        <Checkbox
-                          id={`internal-${task.id}`}
-                          checked={isInternal}
-                          onCheckedChange={(v) => setIsInternal(!!v)}
-                        />
-                        <Label htmlFor={`internal-${task.id}`} className="text-[10px] text-gray-500 whitespace-nowrap">
-                          Internal
-                        </Label>
-                      </div>
-                      <Button size="sm" onClick={submitComment} disabled={!newComment.trim()}>
-                        Post
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 pt-2">
-                <Button size="sm" onClick={handleSave}>
-                  Save
-                </Button>
-                <Button size="sm" variant="outline" onClick={handleCancel}>
+              <DialogFooter className="mt-6 pt-4 border-t">
+                <Button variant="outline" onClick={handleCancel}>
                   Cancel
                 </Button>
-              </div>
-            </div>
-          )}
+                <Button onClick={handleSave} className="bg-[#00c9e3] hover:bg-[#00b0c8] text-white">
+                  Save Changes
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">

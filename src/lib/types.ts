@@ -181,6 +181,21 @@ export interface ActivityLog {
   created_at: string;
 }
 
+// --- Comments ---
+
+export interface Comment {
+  id: string;
+  project_id: string;
+  task_id: string;
+  author_email: string;
+  author_name: string;
+  author_type: 'staff' | 'client' | 'system';
+  content: string;
+  is_internal: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // --- Stages ---
 
 export interface Stage {
@@ -294,7 +309,7 @@ export interface PortalView {
   tasks: Array<
     Pick<Task, 'id' | 'title' | 'description' | 'category' | 'status' | 'requires_file_upload' | 'requires_signature' | 'client_notes' | 'order_index' | 'due_date' | 'stage_id' | 'checklist'>
   >;
-  stages: Array<Pick<Stage, 'id' | 'name' | 'order_index' | 'status'>>;
+  stages: Array<Pick<Stage, 'id' | 'name' | 'order_index' | 'status'> & { total_tasks: number; completed_tasks: number }>;
   progress: number;
   total_tasks: number;
   completed_tasks: number;
@@ -325,4 +340,21 @@ export interface CrmProjectSummary {
   total_tasks: number;
   completed_tasks: number;
   pending_signatures: number;
+}
+
+export interface ClientSummary {
+  email: string;
+  name: string | null;
+  phone: string | null;
+  community: string | null;
+  project_count: number;
+  active_count: number;
+  completed_count: number;
+  last_activity: string | null;
+  projects: Array<{
+    id: string;
+    name: string;
+    status: ProjectStatus;
+    progress: number;
+  }>;
 }

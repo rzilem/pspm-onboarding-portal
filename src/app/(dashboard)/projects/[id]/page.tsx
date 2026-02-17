@@ -8,6 +8,7 @@ import {
   Clock, User, Building2, Loader2, AlertCircle, Plus,
   ChevronDown, ChevronRight, Trash2, Search, X, CalendarIcon,
   CheckCircle2, Circle, Download, Upload, Mail, MessageSquare, Files,
+  GripVertical,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -103,6 +104,10 @@ export default function ProjectDetailPage() {
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateName, setDuplicateName] = useState('');
   const [duplicating, setDuplicating] = useState(false);
+
+  // Drag-and-drop reorder state
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
 
   const headers = { 'X-API-Key': getApiKey() };
 
@@ -495,6 +500,52 @@ export default function ProjectDetailPage() {
     });
   }
 
+  // Drag-and-drop task reorder handlers
+  function handleTaskDragStart(taskId: string) {
+    setDraggedTaskId(taskId);
+  }
+
+  function handleTaskDragOver(e: React.DragEvent, targetTaskId: string) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTaskId(targetTaskId);
+  }
+
+  async function handleTaskDrop(e: React.DragEvent, targetTaskId: string) {
+    e.preventDefault();
+    setDragOverTaskId(null);
+    if (!draggedTaskId || draggedTaskId === targetTaskId) {
+      setDraggedTaskId(null);
+      return;
+    }
+
+    const tasksCopy = [...tasks];
+    const dragIdx = tasksCopy.findIndex((t) => t.id === draggedTaskId);
+    const dropIdx = tasksCopy.findIndex((t) => t.id === targetTaskId);
+    if (dragIdx < 0 || dropIdx < 0) {
+      setDraggedTaskId(null);
+      return;
+    }
+
+    const [moved] = tasksCopy.splice(dragIdx, 1);
+    tasksCopy.splice(dropIdx, 0, moved);
+
+    const reordered = tasksCopy.map((t, i) => ({ id: t.id, order_index: i }));
+
+    try {
+      await apiFetch(`/api/projects/${projectId}/tasks/reorder`, {
+        method: 'PATCH',
+        body: { tasks: reordered },
+      });
+      toast.success('Tasks reordered');
+      fetchAll();
+    } catch (err) {
+      toast.error('Failed to reorder tasks');
+    } finally {
+      setDraggedTaskId(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -719,6 +770,7 @@ export default function ProjectDetailPage() {
           <TabsTrigger value="signatures">Signatures ({signatures.length})</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="calendar">Calendar</TabsTrigger>
         </TabsList>
 
         <TabsContent value="tasks" className="space-y-4 mt-4">
@@ -827,6 +879,10 @@ export default function ProjectDetailPage() {
                           onUpdate={updateTask}
                           onDelete={deleteTask}
                           projectId={projectId}
+                          onDragStart={handleTaskDragStart}
+                          onDragOver={handleTaskDragOver}
+                          onDrop={handleTaskDrop}
+                          isDragTarget={dragOverTaskId === task.id}
                         />
                       ))}
                     </div>
@@ -853,6 +909,10 @@ export default function ProjectDetailPage() {
                       onUpdate={updateTask}
                       onDelete={deleteTask}
                       projectId={projectId}
+                      onDragStart={handleTaskDragStart}
+                      onDragOver={handleTaskDragOver}
+                      onDrop={handleTaskDrop}
+                      isDragTarget={dragOverTaskId === task.id}
                     />
                   ))}
                 </div>
@@ -986,6 +1046,10 @@ export default function ProjectDetailPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="calendar" className="mt-4">
+          <CalendarView tasks={tasks} onQuickComplete={(taskId) => updateTask(taskId, { status: 'completed' })} />
         </TabsContent>
       </Tabs>
 
@@ -1404,6 +1468,10 @@ function TaskRow({
   onUpdate,
   onDelete,
   projectId,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  isDragTarget,
 }: {
   task: Task;
   selected: boolean;
@@ -1411,6 +1479,10 @@ function TaskRow({
   onUpdate: (taskId: string, updates: Partial<Task>) => void;
   onDelete: (taskId: string) => void;
   projectId: string;
+  onDragStart: (taskId: string) => void;
+  onDragOver: (e: React.DragEvent, taskId: string) => void;
+  onDrop: (e: React.DragEvent, taskId: string) => void;
+  isDragTarget: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editData, setEditData] = useState({
@@ -1526,8 +1598,22 @@ function TaskRow({
   const completedChecklistCount = task.checklist.filter((i) => i.completed).length;
 
   return (
-    <Card className="p-3">
+    <Card
+      className={cn("p-3", isDragTarget && "border-t-2 border-[#00c9e3]")}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart(task.id);
+      }}
+      onDragOver={(e) => onDragOver(e, task.id)}
+      onDrop={(e) => onDrop(e, task.id)}
+      onDragEnd={() => {/* cleanup handled in parent drop */}}
+    >
       <div className="flex items-start gap-3">
+        <div className="cursor-grab active:cursor-grabbing mt-1 text-gray-300 hover:text-gray-500 flex-shrink-0">
+          <GripVertical className="h-4 w-4" />
+        </div>
+
         <Checkbox checked={selected} onCheckedChange={onToggleSelect} className="mt-0.5" />
 
         <button
@@ -1808,5 +1894,168 @@ function TaskRow({
         </div>
       </div>
     </Card>
+  );
+}
+
+function CalendarView({ tasks, onQuickComplete }: { tasks: Task[]; onQuickComplete: (id: string) => void }) {
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Build a map of date -> tasks
+  const tasksByDate = new Map<string, Task[]>();
+  tasks.forEach((task) => {
+    if (task.due_date) {
+      const dateKey = task.due_date.slice(0, 10); // YYYY-MM-DD
+      const existing = tasksByDate.get(dateKey) || [];
+      existing.push(task);
+      tasksByDate.set(dateKey, existing);
+    }
+  });
+
+  // Get tasks for selected date
+  const selectedDateKey = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
+  const selectedDateTasks = selectedDateKey ? (tasksByDate.get(selectedDateKey) || []) : [];
+
+  // Determine color category for a date
+  function getDateIndicator(date: Date): 'overdue' | 'today' | 'upcoming' | 'done' | null {
+    const key = format(date, 'yyyy-MM-dd');
+    const dayTasks = tasksByDate.get(key);
+    if (!dayTasks || dayTasks.length === 0) return null;
+
+    const hasOverdue = dayTasks.some((t) => {
+      if (t.status === 'completed') return false;
+      const d = new Date(t.due_date!);
+      d.setHours(0, 0, 0, 0);
+      return d < today;
+    });
+    if (hasOverdue) return 'overdue';
+
+    const hasTodayPending = dayTasks.some((t) => {
+      if (t.status === 'completed') return false;
+      const d = new Date(t.due_date!);
+      d.setHours(0, 0, 0, 0);
+      return d.getTime() === today.getTime();
+    });
+    if (hasTodayPending) return 'today';
+
+    const hasUpcoming = dayTasks.some((t) => t.status !== 'completed');
+    if (hasUpcoming) return 'upcoming';
+
+    return 'done';
+  }
+
+  // Build modifier sets for calendar styling
+  const overdueDates: Date[] = [];
+  const todayDates: Date[] = [];
+  const upcomingDates: Date[] = [];
+  const doneDates: Date[] = [];
+
+  tasksByDate.forEach((_, key) => {
+    const d = new Date(key + 'T00:00:00');
+    const indicator = getDateIndicator(d);
+    if (indicator === 'overdue') overdueDates.push(d);
+    else if (indicator === 'today') todayDates.push(d);
+    else if (indicator === 'upcoming') upcomingDates.push(d);
+    else if (indicator === 'done') doneDates.push(d);
+  });
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6">
+      <Card className="p-4 w-fit">
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={setSelectedDate}
+          modifiers={{
+            overdue: overdueDates,
+            dueToday: todayDates,
+            upcoming: upcomingDates,
+            done: doneDates,
+          }}
+          modifiersClassNames={{
+            overdue: 'bg-red-100 text-red-700 font-bold rounded-md',
+            dueToday: 'bg-amber-100 text-amber-700 font-bold rounded-md',
+            upcoming: 'bg-blue-100 text-blue-700 font-bold rounded-md',
+            done: 'bg-emerald-100 text-emerald-700 font-bold rounded-md',
+          }}
+        />
+        {/* Legend */}
+        <div className="flex items-center gap-4 mt-4 px-2 text-xs text-gray-500">
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-red-500" />
+            Overdue
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-amber-500" />
+            Today
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-blue-500" />
+            Upcoming
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            Done
+          </div>
+        </div>
+      </Card>
+
+      {/* Selected date task list */}
+      <div>
+        {selectedDate ? (
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Tasks for {format(selectedDate, 'MMMM d, yyyy')}
+            </h3>
+            {selectedDateTasks.length === 0 ? (
+              <p className="text-sm text-gray-400">No tasks due on this date</p>
+            ) : (
+              <div className="space-y-2">
+                {selectedDateTasks.map((task) => {
+                  const isOverdue = task.due_date && task.status !== 'completed' && new Date(task.due_date) < new Date();
+                  return (
+                    <Card key={task.id} className="p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        {task.status === 'completed' ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        ) : isOverdue ? (
+                          <AlertCircle className="h-4 w-4 text-red-500" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-gray-300" />
+                        )}
+                        <div>
+                          <p className={cn('text-sm font-medium', task.status === 'completed' && 'line-through text-gray-400')}>
+                            {task.title}
+                          </p>
+                          <Badge variant="outline" className="text-xs mt-1">
+                            {categoryLabel(task.category)}
+                          </Badge>
+                        </div>
+                      </div>
+                      {task.status !== 'completed' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onQuickComplete(task.id)}
+                          className="text-xs"
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          Complete
+                        </Button>
+                      )}
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-48 text-sm text-gray-400">
+            Click a date to see tasks
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

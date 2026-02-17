@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { BarChart3, ClipboardList, LayoutTemplate, FileText, LogOut, Menu } from 'lucide-react';
+import { BarChart3, ClipboardList, LayoutTemplate, FileText, Users, LogOut, Menu } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 
@@ -11,6 +11,7 @@ const navItems = [
   { href: '/projects', label: 'Projects', icon: ClipboardList },
   { href: '/templates', label: 'Templates', icon: LayoutTemplate },
   { href: '/documents', label: 'Documents', icon: FileText },
+  { href: '/clients', label: 'Clients', icon: Users },
 ];
 
 export default function DashboardLayout({

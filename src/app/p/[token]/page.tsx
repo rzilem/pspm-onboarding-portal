@@ -6,12 +6,12 @@ import Link from 'next/link';
 import {
   CheckCircle2, Circle, Upload, PenLine, FileText,
   Loader2, PartyPopper, Building2, Calendar,
+  ChevronDown, ChevronRight, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { formatDate, categoryLabel, statusColor } from '@/lib/utils';
 import type { PortalView } from '@/lib/types';
 import { toast } from 'sonner';
@@ -22,6 +22,7 @@ export default function ClientPortalPage() {
   const [data, setData] = useState<PortalView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
 
   const fetchData = useCallback(async () => {
     try {
@@ -62,7 +63,7 @@ export default function ClientPortalPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-[#00c9e3]" />
       </div>
     );
@@ -70,7 +71,7 @@ export default function ClientPortalPage() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center py-20 px-4">
         <Card className="max-w-md w-full p-8 text-center">
           <h2 className="text-xl font-semibold text-gray-900">Portal Not Found</h2>
           <p className="text-sm text-gray-500 mt-2">
@@ -87,23 +88,22 @@ export default function ClientPortalPage() {
   const allDone = data.progress === 100;
   const pendingSignatures = data.signatures.filter((s) => s.status !== 'signed');
   const signedSignatures = data.signatures.filter((s) => s.status === 'signed');
+  const hasStages = data.stages.length > 0;
+
+  function toggleStage(stageId: string) {
+    setCollapsedStages((prev) => {
+      const next = new Set(prev);
+      if (next.has(stageId)) {
+        next.delete(stageId);
+      } else {
+        next.add(stageId);
+      }
+      return next;
+    });
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* PSPM Header */}
-      <header className="bg-white border-b">
-        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-[#00c9e3] flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-sm">PS</span>
-          </div>
-          <div>
-            <h1 className="font-semibold text-gray-900">PS Property Management</h1>
-            <p className="text-xs text-gray-500">Community Onboarding Portal</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
         {/* Project header */}
         <div>
           <h2 className="text-2xl font-bold text-gray-900">{data.project.name}</h2>
@@ -134,6 +134,69 @@ export default function ClientPortalPage() {
             {data.completed_tasks} of {data.total_tasks} tasks completed
           </p>
         </Card>
+
+        {/* Stage stepper */}
+        {hasStages && (
+          <Card className="p-5">
+            <div className="overflow-x-auto">
+              <div className="flex items-start min-w-max">
+                {data.stages.map((stage, idx) => {
+                  const isCompleted = stage.status === 'completed';
+                  const isActive = stage.status === 'active';
+                  const isLast = idx === data.stages.length - 1;
+
+                  return (
+                    <div key={stage.id} className="flex items-start flex-1 min-w-[100px]">
+                      {/* Stage dot + label */}
+                      <div className="flex flex-col items-center text-center">
+                        <div
+                          className={`flex items-center justify-center w-9 h-9 rounded-full border-2 transition-colors ${
+                            isCompleted
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : isActive
+                                ? 'bg-[#00c9e3] border-[#00c9e3] text-white'
+                                : 'bg-white border-gray-300 text-gray-400'
+                          }`}
+                        >
+                          {isCompleted ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <span className="text-xs font-semibold">{idx + 1}</span>
+                          )}
+                        </div>
+                        <p
+                          className={`mt-1.5 text-xs font-medium max-w-[90px] leading-tight ${
+                            isCompleted
+                              ? 'text-emerald-600'
+                              : isActive
+                                ? 'text-[#00c9e3]'
+                                : 'text-gray-400'
+                          }`}
+                        >
+                          {stage.name}
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {stage.completed_tasks}/{stage.total_tasks}
+                        </p>
+                      </div>
+
+                      {/* Connecting line */}
+                      {!isLast && (
+                        <div className="flex-1 flex items-center pt-[18px] px-2">
+                          <div
+                            className={`h-0.5 w-full ${
+                              isCompleted ? 'bg-emerald-500' : 'bg-gray-200'
+                            }`}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Completion celebration */}
         {allDone && (
@@ -174,53 +237,228 @@ export default function ClientPortalPage() {
           </div>
         )}
 
-        {/* Task list */}
+        {/* Task list — grouped by stage when stages exist, flat otherwise */}
         <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Your Tasks</h3>
-          <div className="space-y-2">
-            {data.tasks.map((task) => {
-              const isCompleted = task.status === 'completed';
 
-              return (
-                <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
-                  <div className="flex items-start gap-3">
+          {hasStages ? (
+            <div className="space-y-4">
+              {data.stages.map((stage) => {
+                const stageTasks = data.tasks.filter((t) => t.stage_id === stage.id);
+                if (stageTasks.length === 0) return null;
+
+                const isCollapsed = collapsedStages.has(stage.id);
+                const stageCompleted = stage.completed_tasks === stage.total_tasks && stage.total_tasks > 0;
+                const stageActive = stage.status === 'active';
+
+                return (
+                  <div key={stage.id}>
+                    {/* Stage group header */}
                     <button
-                      onClick={() => !isCompleted && completeTask(task.id)}
-                      disabled={isCompleted}
-                      className="mt-0.5 flex-shrink-0"
+                      onClick={() => toggleStage(stage.id)}
+                      className="flex items-center gap-2 w-full text-left mb-2 group"
                     >
-                      {isCompleted ? (
-                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      {isCollapsed ? (
+                        <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
                       ) : (
-                        <Circle className="h-5 w-5 text-gray-300 hover:text-[#00c9e3] transition-colors" />
+                        <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
                       )}
+                      <span
+                        className={`text-sm font-semibold ${
+                          stageCompleted
+                            ? 'text-emerald-600'
+                            : stageActive
+                              ? 'text-[#00c9e3]'
+                              : 'text-gray-700'
+                        }`}
+                      >
+                        {stage.name}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] ml-1 ${
+                          stageCompleted
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : stageActive
+                              ? 'bg-sky-500/10 text-sky-600 border-sky-500/20'
+                              : 'bg-gray-500/10 text-gray-500 border-gray-500/20'
+                        }`}
+                      >
+                        {stage.completed_tasks}/{stage.total_tasks} completed
+                      </Badge>
                     </button>
-                    <div className="flex-1 min-w-0">
-                      <p className={`font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                        {task.title}
-                      </p>
-                      {task.description && (
-                        <p className="text-sm text-gray-500 mt-0.5">{task.description}</p>
+
+                    {/* Stage tasks */}
+                    {!isCollapsed && (
+                      <div className="space-y-2 ml-6">
+                        {stageTasks.map((task) => {
+                          const isCompleted = task.status === 'completed';
+                          return (
+                            <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
+                              <div className="flex items-start gap-3">
+                                <button
+                                  onClick={() => !isCompleted && completeTask(task.id)}
+                                  disabled={isCompleted}
+                                  className="mt-0.5 flex-shrink-0"
+                                >
+                                  {isCompleted ? (
+                                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                  ) : (
+                                    <Circle className="h-5 w-5 text-gray-300 hover:text-[#00c9e3] transition-colors" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                    {task.title}
+                                  </p>
+                                  {task.description && (
+                                    <p className="text-sm text-gray-500 mt-0.5">{task.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {categoryLabel(task.category)}
+                                    </Badge>
+                                    {task.requires_file_upload && !isCompleted && (
+                                      <Link href={`/p/${token}/upload/${task.id}`}>
+                                        <Button variant="outline" size="sm" className="h-6 text-xs">
+                                          <Upload className="h-3 w-3 mr-1" />
+                                          Upload File
+                                        </Button>
+                                      </Link>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Tasks without a stage */}
+              {(() => {
+                const stageIds = new Set(data.stages.map((s) => s.id));
+                const unstagedTasks = data.tasks.filter((t) => !t.stage_id || !stageIds.has(t.stage_id));
+                if (unstagedTasks.length === 0) return null;
+
+                const isCollapsed = collapsedStages.has('__unstaged__');
+
+                return (
+                  <div>
+                    <button
+                      onClick={() => toggleStage('__unstaged__')}
+                      className="flex items-center gap-2 w-full text-left mb-2 group"
+                    >
+                      {isCollapsed ? (
+                        <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
                       )}
-                      <div className="flex items-center gap-2 mt-2">
-                        <Badge variant="outline" className="text-xs">
-                          {categoryLabel(task.category)}
-                        </Badge>
-                        {task.requires_file_upload && !isCompleted && (
-                          <Link href={`/p/${token}/upload/${task.id}`}>
-                            <Button variant="outline" size="sm" className="h-6 text-xs">
-                              <Upload className="h-3 w-3 mr-1" />
-                              Upload File
-                            </Button>
-                          </Link>
+                      <span className="text-sm font-semibold text-gray-700">Other Tasks</span>
+                      <Badge variant="outline" className="text-[10px] ml-1 bg-gray-500/10 text-gray-500 border-gray-500/20">
+                        {unstagedTasks.filter((t) => t.status === 'completed').length}/{unstagedTasks.length} completed
+                      </Badge>
+                    </button>
+
+                    {!isCollapsed && (
+                      <div className="space-y-2 ml-6">
+                        {unstagedTasks.map((task) => {
+                          const isCompleted = task.status === 'completed';
+                          return (
+                            <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
+                              <div className="flex items-start gap-3">
+                                <button
+                                  onClick={() => !isCompleted && completeTask(task.id)}
+                                  disabled={isCompleted}
+                                  className="mt-0.5 flex-shrink-0"
+                                >
+                                  {isCompleted ? (
+                                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                  ) : (
+                                    <Circle className="h-5 w-5 text-gray-300 hover:text-[#00c9e3] transition-colors" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                    {task.title}
+                                  </p>
+                                  {task.description && (
+                                    <p className="text-sm text-gray-500 mt-0.5">{task.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-2 mt-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {categoryLabel(task.category)}
+                                    </Badge>
+                                    {task.requires_file_upload && !isCompleted && (
+                                      <Link href={`/p/${token}/upload/${task.id}`}>
+                                        <Button variant="outline" size="sm" className="h-6 text-xs">
+                                          <Upload className="h-3 w-3 mr-1" />
+                                          Upload File
+                                        </Button>
+                                      </Link>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            /* Flat task list — backwards compatible when no stages exist */
+            <div className="space-y-2">
+              {data.tasks.map((task) => {
+                const isCompleted = task.status === 'completed';
+
+                return (
+                  <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => !isCompleted && completeTask(task.id)}
+                        disabled={isCompleted}
+                        className="mt-0.5 flex-shrink-0"
+                      >
+                        {isCompleted ? (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                        ) : (
+                          <Circle className="h-5 w-5 text-gray-300 hover:text-[#00c9e3] transition-colors" />
                         )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                          {task.title}
+                        </p>
+                        {task.description && (
+                          <p className="text-sm text-gray-500 mt-0.5">{task.description}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="outline" className="text-xs">
+                            {categoryLabel(task.category)}
+                          </Badge>
+                          {task.requires_file_upload && !isCompleted && (
+                            <Link href={`/p/${token}/upload/${task.id}`}>
+                              <Button variant="outline" size="sm" className="h-6 text-xs">
+                                <Upload className="h-3 w-3 mr-1" />
+                                Upload File
+                              </Button>
+                            </Link>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Uploaded files */}
@@ -244,13 +482,6 @@ export default function ClientPortalPage() {
           </div>
         )}
 
-        {/* Footer */}
-        <Separator />
-        <div className="text-center text-xs text-gray-400 pb-8">
-          <p>PS Property Management · Serving Central Texas since 1987</p>
-          <p className="mt-1">(512) 251-6122 · info@psprop.net</p>
-        </div>
-      </main>
     </div>
   );
 }

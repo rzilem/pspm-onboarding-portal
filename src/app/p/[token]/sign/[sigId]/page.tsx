@@ -160,7 +160,7 @@ export default function SignaturePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-[#00c9e3]" />
       </div>
     );
@@ -168,7 +168,7 @@ export default function SignaturePage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="flex items-center justify-center py-20 px-4">
         <Card className="max-w-md w-full p-8 text-center">
           <h2 className="text-xl font-semibold">Signature Not Found</h2>
           <p className="text-sm text-gray-500 mt-2">This signature link is invalid or expired.</p>
@@ -179,7 +179,7 @@ export default function SignaturePage() {
 
   if (signed) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="flex items-center justify-center py-20 px-4">
         <Card className="max-w-md w-full p-8 text-center">
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
           <h2 className="text-xl font-bold text-gray-900">Document Signed</h2>
@@ -200,20 +200,7 @@ export default function SignaturePage() {
   const canSubmit = consented && (activeTab === 'draw' ? hasDrawn : typedName.trim().length > 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-[#00c9e3] flex items-center justify-center">
-            <span className="text-white font-bold text-sm">PS</span>
-          </div>
-          <div>
-            <h1 className="font-semibold text-gray-900">Sign Document</h1>
-            <p className="text-xs text-gray-500">PS Property Management</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <Button variant="ghost" size="sm" onClick={() => router.push(`/p/${token}`)}>
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Portal
         </Button>
@@ -326,7 +313,6 @@ export default function SignaturePage() {
         <p className="text-xs text-center text-gray-400 pb-8">
           Your signature will be recorded with a timestamp, IP address, and user agent for legal compliance.
         </p>
-      </main>
     </div>
   );
 }

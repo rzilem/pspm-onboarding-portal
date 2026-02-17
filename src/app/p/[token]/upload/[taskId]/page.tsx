@@ -80,7 +80,7 @@ export default function UploadPage() {
 
   if (uploaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="flex items-center justify-center py-20 px-4">
         <Card className="max-w-md w-full p-8 text-center">
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
           <h2 className="text-xl font-bold text-gray-900">File Uploaded</h2>
@@ -99,20 +99,7 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-[#00c9e3] flex items-center justify-center">
-            <span className="text-white font-bold text-sm">PS</span>
-          </div>
-          <div>
-            <h1 className="font-semibold text-gray-900">Upload Document</h1>
-            <p className="text-xs text-gray-500">PS Property Management</p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         <Button variant="ghost" size="sm" onClick={() => router.push(`/p/${token}`)}>
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Portal
         </Button>
@@ -178,7 +165,6 @@ export default function UploadPage() {
             </div>
           </Card>
         )}
-      </main>
     </div>
   );
 }

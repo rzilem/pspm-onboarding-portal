@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest } from '@/lib/supabase';
 import { validatePortalToken } from '@/lib/auth';
-import type { Task, OnboardingFile, Signature, Project, PortalView } from '@/lib/types';
+import type { Task, OnboardingFile, Signature, Project, PortalView, Stage } from '@/lib/types';
 
 /**
  * GET /api/portal/[token]
@@ -43,6 +43,16 @@ export async function GET(
       `onboarding_files?project_id=eq.${project.id}&select=id,file_name,task_id,created_at`,
     );
 
+    // Fetch stages for this project
+    const stagesRaw = await supabaseRest<Stage[]>(
+      `onboarding_stages?project_id=eq.${project.id}&order=order_index.asc`,
+    );
+
+    // Fetch ALL tasks (including internal) for accurate per-stage counts
+    const allTasks = await supabaseRest<Pick<Task, 'id' | 'stage_id' | 'status'>[]>(
+      `onboarding_tasks?project_id=eq.${project.id}&select=id,stage_id,status`,
+    );
+
     // Calculate progress
     const completedTasks = tasks.filter((t) => t.status === 'completed');
     const progress = tasks.length > 0
@@ -73,7 +83,17 @@ export async function GET(
         stage_id: t.stage_id ?? null,
         checklist: t.checklist ?? [],
       })),
-      stages: [],
+      stages: stagesRaw.map((s) => {
+        const stageTasks = allTasks.filter((t) => t.stage_id === s.id);
+        return {
+          id: s.id,
+          name: s.name,
+          order_index: s.order_index,
+          status: s.status,
+          total_tasks: stageTasks.length,
+          completed_tasks: stageTasks.filter((t) => t.status === 'completed').length,
+        };
+      }),
       progress,
       total_tasks: tasks.length,
       completed_tasks: completedTasks.length,

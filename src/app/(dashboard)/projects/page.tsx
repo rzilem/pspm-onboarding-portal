@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Search, Building2, Calendar, User, X, Tag as TagIcon } from 'lucide-react';
+import { Plus, Search, Building2, Calendar, User, X, Tag as TagIcon, LayoutGrid, List, GripVertical } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +49,13 @@ function ProjectsPageContent() {
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
   const [tagFilter, setTagFilter] = useState(searchParams.get('tag') || '');
   const [staffFilter, setStaffFilter] = useState(searchParams.get('staff') || 'all');
+
+  // View mode: list (grid cards) or board (kanban)
+  const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
+
+  // Drag-and-drop state for kanban board
+  const [draggedProject, setDraggedProject] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
 
   // Debounce ref for search
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -162,12 +170,34 @@ function ProjectsPageContent() {
             {projects.length} project{projects.length !== 1 ? 's' : ''} total
           </p>
         </div>
-        <Link href="/projects/new">
-          <Button className="bg-[#00c9e3] hover:bg-[#00b0c8]">
-            <Plus className="h-4 w-4 mr-2" />
-            New Project
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center border rounded-md">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              className={viewMode === 'list' ? 'bg-[#00c9e3] hover:bg-[#00b0c8] text-white' : ''}
+              onClick={() => setViewMode('list')}
+              title="List view"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'board' ? 'default' : 'ghost'}
+              size="sm"
+              className={viewMode === 'board' ? 'bg-[#00c9e3] hover:bg-[#00b0c8] text-white' : ''}
+              onClick={() => setViewMode('board')}
+              title="Board view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
+          <Link href="/projects/new">
+            <Button className="bg-[#00c9e3] hover:bg-[#00b0c8]">
+              <Plus className="h-4 w-4 mr-2" />
+              New Project
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search bar */}
@@ -257,15 +287,29 @@ function ProjectsPageContent() {
       </div>
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="p-6 animate-pulse">
-              <div className="h-5 bg-gray-200 rounded w-3/4 mb-3" />
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-4" />
-              <div className="h-2 bg-gray-200 rounded w-full" />
-            </Card>
-          ))}
-        </div>
+        viewMode === 'list' ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="p-6 animate-pulse">
+                <div className="h-5 bg-gray-200 rounded w-3/4 mb-3" />
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-4" />
+                <div className="h-2 bg-gray-200 rounded w-full" />
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {BOARD_COLUMNS.map((col) => (
+              <div key={col.status} className="flex-shrink-0 w-72">
+                <div className={`${col.color} h-1.5 rounded-t-lg`} />
+                <div className="bg-gray-50 rounded-b-lg p-3 space-y-3">
+                  <div className="h-5 bg-gray-200 rounded w-1/2 animate-pulse" />
+                  <div className="h-24 bg-gray-200 rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : projects.length === 0 ? (
         <Card className="p-12 text-center">
           <ClipboardEmpty />
@@ -274,7 +318,7 @@ function ProjectsPageContent() {
             {hasActiveFilters ? 'Try adjusting your filters' : 'Create your first onboarding project'}
           </p>
         </Card>
-      ) : (
+      ) : viewMode === 'list' ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {projects.map((project) => (
             <Link key={project.id} href={`/projects/${project.id}`}>
@@ -339,10 +383,166 @@ function ProjectsPageContent() {
             </Link>
           ))}
         </div>
+      ) : (
+        /* Kanban Board View */
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {BOARD_COLUMNS.map((col) => {
+            const columnProjects = projects.filter((p) => p.status === col.status);
+            return (
+              <div
+                key={col.status}
+                className="flex-shrink-0 w-72"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDragOverColumn(col.status);
+                }}
+                onDragLeave={(e) => {
+                  // Only clear if leaving the column entirely (not entering a child)
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragOverColumn(null);
+                  }
+                }}
+                onDrop={async (e) => {
+                  e.preventDefault();
+                  setDragOverColumn(null);
+                  if (!draggedProject) return;
+
+                  const project = projects.find((p) => p.id === draggedProject);
+                  if (!project || project.status === col.status) {
+                    setDraggedProject(null);
+                    return;
+                  }
+
+                  try {
+                    await apiFetch(`/api/projects/${draggedProject}`, {
+                      method: 'PATCH',
+                      body: { status: col.status },
+                    });
+                    toast.success(`Moved "${project.name}" to ${col.label}`);
+                    fetchProjects();
+                  } catch (err) {
+                    console.error('Failed to update project status:', err);
+                    toast.error('Failed to update project status');
+                  } finally {
+                    setDraggedProject(null);
+                  }
+                }}
+              >
+                {/* Column header */}
+                <div className={`${col.color} h-1.5 rounded-t-lg`} />
+                <div
+                  className={`rounded-b-lg p-3 min-h-[200px] transition-colors ${
+                    dragOverColumn === col.status
+                      ? `${col.lightColor} ring-2 ring-[#00c9e3] ring-inset`
+                      : 'bg-gray-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-gray-700">{col.label}</h3>
+                    <span className="text-xs font-medium text-gray-400 bg-gray-200 rounded-full px-2 py-0.5">
+                      {columnProjects.length}
+                    </span>
+                  </div>
+
+                  {/* Column cards */}
+                  <div className="space-y-2">
+                    {columnProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        draggable
+                        onDragStart={(e) => {
+                          setDraggedProject(project.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          // Set drag image data for accessibility
+                          e.dataTransfer.setData('text/plain', project.id);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedProject(null);
+                          setDragOverColumn(null);
+                        }}
+                        className={`group bg-white rounded-lg border p-3 cursor-grab active:cursor-grabbing transition-all hover:shadow-sm ${
+                          draggedProject === project.id ? 'opacity-40 scale-95' : ''
+                        }`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <GripVertical className="h-4 w-4 text-gray-300 group-hover:text-gray-400 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <Link
+                              href={`/projects/${project.id}`}
+                              className="text-sm font-medium text-gray-900 line-clamp-2 hover:text-[#00c9e3] transition-colors"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {project.name}
+                            </Link>
+
+                            {project.community_name && (
+                              <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                                <Building2 className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">{project.community_name}</span>
+                              </div>
+                            )}
+
+                            {/* Tag pills */}
+                            {project.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {project.tags.slice(0, 3).map((tag) => (
+                                  <span
+                                    key={tag.id}
+                                    className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-medium"
+                                    style={{
+                                      backgroundColor: tag.color + '20',
+                                      color: tag.color,
+                                    }}
+                                  >
+                                    {tag.name}
+                                  </span>
+                                ))}
+                                {project.tags.length > 3 && (
+                                  <span className="text-[9px] text-gray-400">
+                                    +{project.tags.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Progress */}
+                            <div className="mt-2">
+                              <div className="flex items-center justify-between text-[10px] text-gray-500 mb-0.5">
+                                <span>
+                                  {project.completed_tasks}/{project.total_tasks} tasks
+                                </span>
+                                <span className="font-medium">{project.progress}%</span>
+                              </div>
+                              <Progress value={project.progress} className="h-1" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {columnProjects.length === 0 && (
+                      <div className="text-center py-6 text-xs text-gray-400">
+                        {dragOverColumn === col.status ? 'Drop here' : 'No projects'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
 }
+
+const BOARD_COLUMNS = [
+  { status: 'draft' as const, label: 'Draft', color: 'bg-slate-500', lightColor: 'bg-slate-50' },
+  { status: 'active' as const, label: 'Active', color: 'bg-blue-500', lightColor: 'bg-blue-50' },
+  { status: 'paused' as const, label: 'Paused', color: 'bg-gray-500', lightColor: 'bg-gray-50' },
+  { status: 'completed' as const, label: 'Completed', color: 'bg-emerald-500', lightColor: 'bg-emerald-50' },
+];
 
 function ClipboardEmpty() {
   return (

@@ -1678,7 +1678,7 @@ function TaskRow({
 
           {/* Task Modal — LaunchBay-inspired */}
           <Dialog open={expanded} onOpenChange={(open) => { if (!open) handleCloseModal(); }}>
-            <DialogContent className="max-w-[92vw] sm:max-w-[92vw] w-full max-h-[92vh] flex flex-col p-0 gap-0">
+            <DialogContent className="max-w-[92vw] sm:max-w-[92vw] w-full min-h-[95vh] max-h-[95vh] flex flex-col p-0 gap-0">
               {/* Header bar */}
               <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b">
                 <div>

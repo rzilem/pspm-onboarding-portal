@@ -581,7 +581,7 @@ function AddTaskDialog({
   );
 }
 
-// Edit Task Dialog
+// Edit Task Dialog — LaunchBay-inspired modal
 function EditTaskDialog({
   task,
   stages,
@@ -596,12 +596,21 @@ function EditTaskDialog({
   templateId: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState(task);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) setFormData(task);
+    if (open) {
+      setFormData(task);
+      setEditing(false);
+    }
   }, [open, task]);
+
+  function handleCloseModal() {
+    setEditing(false);
+    setOpen(false);
+  }
 
   async function handleSave() {
     setSubmitting(true);
@@ -611,7 +620,7 @@ function EditTaskDialog({
         body: formData,
       });
       onUpdated(updated);
-      setOpen(false);
+      setEditing(false);
       toast.success('Task updated');
     } catch (err) {
       toast.error('Failed to update task');
@@ -620,152 +629,316 @@ function EditTaskDialog({
     }
   }
 
+  const stageName = task.stage_id ? stages.find((s) => s.id === task.stage_id)?.name : 'Unsorted';
+  const dependsOnTask = task.depends_on ? allTasks.find((t) => t.id === task.depends_on) : null;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) handleCloseModal(); else setOpen(true); }}>
       <DialogTrigger asChild>
         <Button variant="ghost" size="sm">
           <Edit className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Edit Task</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4">
+      <DialogContent className="max-w-[92vw] sm:max-w-[92vw] w-full min-h-[95vh] max-h-[95vh] flex flex-col p-0 gap-0">
+        {/* Header bar */}
+        <div className="flex items-center justify-between px-8 pt-6 pb-4 border-b">
           <div>
-            <Label>Title</Label>
-            <Input value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} />
-          </div>
-          <div>
-            <Label>Description</Label>
-            <Textarea
-              value={formData.description || ''}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Category</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(v) => setFormData({ ...formData, category: v as TaskCategory })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="documents">Documents</SelectItem>
-                  <SelectItem value="setup">Setup</SelectItem>
-                  <SelectItem value="signatures">Signatures</SelectItem>
-                  <SelectItem value="review">Review</SelectItem>
-                  <SelectItem value="financial">Financial</SelectItem>
-                  <SelectItem value="communication">Communication</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Visibility</Label>
-              <Select
-                value={formData.visibility}
-                onValueChange={(v) => setFormData({ ...formData, visibility: v as 'internal' | 'external' })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="internal">Staff Only</SelectItem>
-                  <SelectItem value="external">Client Visible</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Assignee Type</Label>
-              <Select
-                value={formData.assignee_type}
-                onValueChange={(v) => setFormData({ ...formData, assignee_type: v as 'staff' | 'client' })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="client">Client</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Due Days Offset</Label>
-              <Input
-                type="number"
-                value={formData.due_days_offset || ''}
-                onChange={(e) => setFormData({ ...formData, due_days_offset: parseInt(e.target.value) || null })}
-              />
+            <DialogTitle className="text-2xl font-bold text-gray-900">{task.title}</DialogTitle>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              <Badge variant="outline" className="text-xs">
+                {categoryLabel(task.category)}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {task.visibility === 'external' ? 'Client Visible' : 'Staff Only'}
+              </Badge>
+              <Badge variant="outline" className="text-xs capitalize">
+                {task.assignee_type}
+              </Badge>
+              {task.requires_file_upload && (
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
+                  <FileUp className="h-3 w-3 mr-1" /> File Upload
+                </Badge>
+              )}
+              {task.requires_signature && (
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                  <PenLine className="h-3 w-3 mr-1" /> Signature
+                </Badge>
+              )}
+              {task.due_days_offset && (
+                <span className="text-xs text-gray-500 ml-2">Due offset: {task.due_days_offset} days</span>
+              )}
+              {stageName && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-xs text-gray-500">Stage: {stageName}</span>
+                </>
+              )}
+              {dependsOnTask && (
+                <>
+                  <span className="text-gray-300">|</span>
+                  <span className="text-xs text-gray-500">Depends on: {dependsOnTask.title}</span>
+                </>
+              )}
             </div>
           </div>
-          <div>
-            <Label>Stage</Label>
-            <Select
-              value={formData.stage_id || 'none'}
-              onValueChange={(v) => setFormData({ ...formData, stage_id: v === 'none' ? null : v })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Stage (Unsorted)</SelectItem>
-                {stages.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        </div>
+
+        {/* Body — two-column: instructions (wide) + details sidebar (narrow) */}
+        <div className="flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-[1fr_380px]">
+          {/* Left: Instructions area (scrollable) */}
+          <div className="overflow-y-auto px-8 py-6">
+            {!editing ? (
+              /* ── Read-only view (default) ── */
+              <div className="space-y-6">
+                <div className="min-h-[300px]">
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Instructions</h3>
+                  {task.description ? (
+                    <div className="text-base leading-[1.8] text-gray-800 whitespace-pre-wrap">
+                      {task.description}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-48 text-gray-400 italic">
+                      No instructions provided for this task.
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* ── Edit mode ── */
+              <div className="space-y-5">
+                <div>
+                  <Label className="text-sm font-medium">Title</Label>
+                  <Input
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className="mt-1.5 text-base"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-sm font-medium">Instructions</Label>
+                  <Textarea
+                    value={formData.description || ''}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    rows={14}
+                    className="mt-1.5 text-base leading-[1.8]"
+                    placeholder="Add step-by-step instructions for this task..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Category</Label>
+                    <Select
+                      value={formData.category}
+                      onValueChange={(v) => setFormData({ ...formData, category: v as TaskCategory })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="documents">Documents</SelectItem>
+                        <SelectItem value="setup">Setup</SelectItem>
+                        <SelectItem value="signatures">Signatures</SelectItem>
+                        <SelectItem value="review">Review</SelectItem>
+                        <SelectItem value="financial">Financial</SelectItem>
+                        <SelectItem value="communication">Communication</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Visibility</Label>
+                    <Select
+                      value={formData.visibility}
+                      onValueChange={(v) => setFormData({ ...formData, visibility: v as 'internal' | 'external' })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="internal">Staff Only</SelectItem>
+                        <SelectItem value="external">Client Visible</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Assignee Type</Label>
+                    <Select
+                      value={formData.assignee_type}
+                      onValueChange={(v) => setFormData({ ...formData, assignee_type: v as 'staff' | 'client' })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="staff">Staff</SelectItem>
+                        <SelectItem value="client">Client</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Due Days Offset</Label>
+                    <Input
+                      type="number"
+                      value={formData.due_days_offset || ''}
+                      onChange={(e) => setFormData({ ...formData, due_days_offset: parseInt(e.target.value) || null })}
+                      className="mt-1.5"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Stage</Label>
+                    <Select
+                      value={formData.stage_id || 'none'}
+                      onValueChange={(v) => setFormData({ ...formData, stage_id: v === 'none' ? null : v })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Stage (Unsorted)</SelectItem>
+                        {stages.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Depends On</Label>
+                    <Select
+                      value={formData.depends_on || 'none'}
+                      onValueChange={(v) => setFormData({ ...formData, depends_on: v === 'none' ? null : v })}
+                    >
+                      <SelectTrigger className="mt-1.5">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No Dependency</SelectItem>
+                        {allTasks
+                          .filter((t) => t.id !== task.id)
+                          .map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.title}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-6 pt-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={formData.requires_file_upload}
+                      onCheckedChange={(v) => setFormData({ ...formData, requires_file_upload: !!v })}
+                    />
+                    <Label className="text-sm">Requires file upload</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={formData.requires_signature}
+                      onCheckedChange={(v) => setFormData({ ...formData, requires_signature: !!v })}
+                    />
+                    <Label className="text-sm">Requires signature</Label>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div>
-            <Label>Depends On</Label>
-            <Select
-              value={formData.depends_on || 'none'}
-              onValueChange={(v) => setFormData({ ...formData, depends_on: v === 'none' ? null : v })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Dependency</SelectItem>
-                {allTasks
-                  .filter((t) => t.id !== task.id)
-                  .map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.title}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={formData.requires_file_upload}
-                onCheckedChange={(v) => setFormData({ ...formData, requires_file_upload: !!v })}
-              />
-              <Label>Requires file upload</Label>
+
+          {/* Right sidebar: Task Details & Settings */}
+          <div className="border-l bg-gray-50/50 flex flex-col overflow-hidden">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-base font-semibold text-gray-900">Task Details</h3>
             </div>
-            <div className="flex items-center gap-2">
-              <Checkbox
-                checked={formData.requires_signature}
-                onCheckedChange={(v) => setFormData({ ...formData, requires_signature: !!v })}
-              />
-              <Label>Requires signature</Label>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+              {/* Quick info cards */}
+              <div className="space-y-3">
+                <div className="bg-white rounded-lg border p-3">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Category</div>
+                  <div className="text-sm font-medium text-gray-900">{categoryLabel(task.category)}</div>
+                </div>
+                <div className="bg-white rounded-lg border p-3">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Visibility</div>
+                  <div className="text-sm font-medium text-gray-900">{task.visibility === 'external' ? 'Client Visible' : 'Staff Only'}</div>
+                </div>
+                <div className="bg-white rounded-lg border p-3">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Assignee</div>
+                  <div className="text-sm font-medium text-gray-900 capitalize">{task.assignee_type}</div>
+                </div>
+                {task.due_days_offset && (
+                  <div className="bg-white rounded-lg border p-3">
+                    <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Due Offset</div>
+                    <div className="text-sm font-medium text-gray-900">{task.due_days_offset} days after project start</div>
+                  </div>
+                )}
+                <div className="bg-white rounded-lg border p-3">
+                  <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Stage</div>
+                  <div className="text-sm font-medium text-gray-900">{stageName || 'Unsorted'}</div>
+                </div>
+                {dependsOnTask && (
+                  <div className="bg-white rounded-lg border p-3">
+                    <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Depends On</div>
+                    <div className="text-sm font-medium text-gray-900">{dependsOnTask.title}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* Requirements */}
+              <div>
+                <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Requirements</div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-sm">
+                    <FileUp className={`h-4 w-4 ${task.requires_file_upload ? 'text-blue-500' : 'text-gray-300'}`} />
+                    <span className={task.requires_file_upload ? 'text-gray-900' : 'text-gray-400'}>
+                      File upload {task.requires_file_upload ? 'required' : 'not required'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <PenLine className={`h-4 w-4 ${task.requires_signature ? 'text-purple-500' : 'text-gray-300'}`} />
+                    <span className={task.requires_signature ? 'text-gray-900' : 'text-gray-400'}>
+                      Signature {task.requires_signature ? 'required' : 'not required'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order index */}
+              <div className="bg-white rounded-lg border p-3">
+                <div className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Order</div>
+                <div className="text-sm font-medium text-gray-900">Position {task.order_index + 1}</div>
+              </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleSave} disabled={submitting} className="bg-[#00c9e3] hover:bg-[#00b3cc]">
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Changes'}
-            </Button>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-8 py-4 border-t bg-gray-50/80">
+          <div className="text-xs text-gray-400">
+            Template task · {task.id.slice(0, 8)}
+          </div>
+          <div className="flex items-center gap-3">
+            {editing ? (
+              <>
+                <Button variant="outline" onClick={() => { setFormData(task); setEditing(false); }}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={submitting} className="bg-[#00c9e3] hover:bg-[#00b0c8] text-white">
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Save Changes
+                </Button>
+              </>
+            ) : (
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Task
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

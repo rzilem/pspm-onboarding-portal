@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest } from '@/lib/supabase';
 import { validatePortalToken } from '@/lib/auth';
-import type { Task, OnboardingFile, Signature, Project, PortalView, Stage } from '@/lib/types';
+import type { Task, OnboardingFile, Signature, Document, Project, PortalView, Stage } from '@/lib/types';
 
 /**
  * GET /api/portal/[token]
@@ -33,10 +33,22 @@ export async function GET(
       `onboarding_tasks?project_id=eq.${project.id}&visibility=eq.external&order=order_index.asc`,
     );
 
-    // Fetch signatures (exclude declined)
+    // Fetch signatures (exclude declined) with extra fields for portal display
     const signatures = await supabaseRest<Signature[]>(
-      `onboarding_signatures?project_id=eq.${project.id}&status=neq.declined&select=id,status,signer_name,document_id`,
+      `onboarding_signatures?project_id=eq.${project.id}&status=neq.declined&select=id,status,signer_name,document_id,task_id,signed_at`,
     );
+
+    // Fetch document names for signatures that have document_id
+    const docIds = [...new Set(signatures.filter((s) => s.document_id).map((s) => s.document_id!))];
+    const docMap = new Map<string, string>();
+    if (docIds.length > 0) {
+      const docs = await supabaseRest<Document[]>(
+        `onboarding_documents?id=in.(${docIds.join(',')})\&select=id,name`,
+      );
+      for (const doc of docs) {
+        docMap.set(doc.id, doc.name);
+      }
+    }
 
     // Fetch files
     const files = await supabaseRest<OnboardingFile[]>(
@@ -97,7 +109,15 @@ export async function GET(
       progress,
       total_tasks: tasks.length,
       completed_tasks: completedTasks.length,
-      signatures,
+      signatures: signatures.map((s) => ({
+        id: s.id,
+        status: s.status,
+        signer_name: s.signer_name,
+        document_id: s.document_id,
+        task_id: s.task_id,
+        signed_at: s.signed_at,
+        document_name: s.document_id ? docMap.get(s.document_id) || null : null,
+      })),
       files,
     };
 

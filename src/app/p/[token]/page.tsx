@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   CheckCircle2, Circle, Upload, PenLine, FileText,
   Loader2, PartyPopper, Building2, Calendar,
-  ChevronDown, ChevronRight, Check,
+  ChevronDown, ChevronRight, Check, Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -89,6 +89,14 @@ export default function ClientPortalPage() {
   const pendingSignatures = data.signatures.filter((s) => s.status !== 'signed');
   const signedSignatures = data.signatures.filter((s) => s.status === 'signed');
   const hasStages = data.stages.length > 0;
+
+  // Build task_id → signature mapping for "Sign Document" buttons on tasks
+  const taskSignatureMap = new Map<string, { sigId: string; status: string }>();
+  for (const sig of data.signatures) {
+    if (sig.task_id && sig.status !== 'signed') {
+      taskSignatureMap.set(sig.task_id, { sigId: sig.id, status: sig.status });
+    }
+  }
 
   function toggleStage(stageId: string) {
     setCollapsedStages((prev) => {
@@ -220,7 +228,12 @@ export default function ClientPortalPage() {
               {pendingSignatures.map((sig) => (
                 <Card key={sig.id} className="p-4 flex items-center justify-between border-amber-200 bg-amber-50/50">
                   <div>
-                    <p className="font-medium text-gray-900">{sig.signer_name}</p>
+                    {sig.document_name && (
+                      <p className="font-medium text-gray-900">{sig.document_name}</p>
+                    )}
+                    <p className={sig.document_name ? 'text-sm text-gray-500' : 'font-medium text-gray-900'}>
+                      {sig.signer_name}
+                    </p>
                     <Badge variant="outline" className={statusColor(sig.status)}>
                       {sig.status === 'pending' ? 'Awaiting Signature' : sig.status}
                     </Badge>
@@ -231,6 +244,39 @@ export default function ClientPortalPage() {
                       Sign Now
                     </Button>
                   </Link>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Completed signatures */}
+        {signedSignatures.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+              Completed Signatures ({signedSignatures.length})
+            </h3>
+            <div className="space-y-2">
+              {signedSignatures.map((sig) => (
+                <Card key={sig.id} className="p-4 flex items-center justify-between border-emerald-200 bg-emerald-50/50">
+                  <div>
+                    {sig.document_name && (
+                      <p className="font-medium text-gray-900">{sig.document_name}</p>
+                    )}
+                    <p className={sig.document_name ? 'text-sm text-gray-500' : 'font-medium text-gray-900'}>
+                      {sig.signer_name}
+                    </p>
+                    {sig.signed_at && (
+                      <p className="text-xs text-gray-400 mt-0.5">Signed {formatDate(sig.signed_at)}</p>
+                    )}
+                  </div>
+                  <a href={`/api/portal/${token}/signatures/${sig.id}/document`} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline" size="sm">
+                      <Download className="h-3.5 w-3.5 mr-1" />
+                      Download PDF
+                    </Button>
+                  </a>
                 </Card>
               ))}
             </div>
@@ -293,6 +339,7 @@ export default function ClientPortalPage() {
                       <div className="space-y-2 ml-6">
                         {stageTasks.map((task) => {
                           const isCompleted = task.status === 'completed';
+                          const taskSig = taskSignatureMap.get(task.id);
                           return (
                             <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
                               <div className="flex items-start gap-3">
@@ -323,6 +370,14 @@ export default function ClientPortalPage() {
                                         <Button variant="outline" size="sm" className="h-6 text-xs">
                                           <Upload className="h-3 w-3 mr-1" />
                                           Upload File
+                                        </Button>
+                                      </Link>
+                                    )}
+                                    {task.requires_signature && !isCompleted && taskSig && (
+                                      <Link href={`/p/${token}/sign/${taskSig.sigId}`}>
+                                        <Button size="sm" className="h-6 text-xs bg-[#00c9e3] hover:bg-[#00b0c8]">
+                                          <PenLine className="h-3 w-3 mr-1" />
+                                          Sign Document
                                         </Button>
                                       </Link>
                                     )}
@@ -367,6 +422,7 @@ export default function ClientPortalPage() {
                       <div className="space-y-2 ml-6">
                         {unstagedTasks.map((task) => {
                           const isCompleted = task.status === 'completed';
+                          const taskSig = taskSignatureMap.get(task.id);
                           return (
                             <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
                               <div className="flex items-start gap-3">
@@ -400,6 +456,14 @@ export default function ClientPortalPage() {
                                         </Button>
                                       </Link>
                                     )}
+                                    {task.requires_signature && !isCompleted && taskSig && (
+                                      <Link href={`/p/${token}/sign/${taskSig.sigId}`}>
+                                        <Button size="sm" className="h-6 text-xs bg-[#00c9e3] hover:bg-[#00b0c8]">
+                                          <PenLine className="h-3 w-3 mr-1" />
+                                          Sign Document
+                                        </Button>
+                                      </Link>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -417,6 +481,7 @@ export default function ClientPortalPage() {
             <div className="space-y-2">
               {data.tasks.map((task) => {
                 const isCompleted = task.status === 'completed';
+                const taskSig = taskSignatureMap.get(task.id);
 
                 return (
                   <Card key={task.id} className={`p-4 ${isCompleted ? 'opacity-60' : ''}`}>
@@ -448,6 +513,14 @@ export default function ClientPortalPage() {
                               <Button variant="outline" size="sm" className="h-6 text-xs">
                                 <Upload className="h-3 w-3 mr-1" />
                                 Upload File
+                              </Button>
+                            </Link>
+                          )}
+                          {task.requires_signature && !isCompleted && taskSig && (
+                            <Link href={`/p/${token}/sign/${taskSig.sigId}`}>
+                              <Button size="sm" className="h-6 text-xs bg-[#00c9e3] hover:bg-[#00b0c8]">
+                                <PenLine className="h-3 w-3 mr-1" />
+                                Sign Document
                               </Button>
                             </Link>
                           )}

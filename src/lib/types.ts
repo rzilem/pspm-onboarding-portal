@@ -313,7 +313,7 @@ export interface PortalView {
   progress: number;
   total_tasks: number;
   completed_tasks: number;
-  signatures: Array<Pick<Signature, 'id' | 'status' | 'signer_name' | 'document_id'>>;
+  signatures: Array<Pick<Signature, 'id' | 'status' | 'signer_name' | 'document_id' | 'task_id' | 'signed_at'> & { document_name: string | null }>;
   files: Array<Pick<OnboardingFile, 'id' | 'file_name' | 'task_id' | 'created_at'>>;
 }
 
@@ -329,6 +329,13 @@ export interface DashboardStats {
   avg_completion_percent: number;
 }
 
+export interface CrmSignatureDetail {
+  id: string;
+  signer_name: string;
+  document_name: string | null;
+  status: SignatureStatus;
+}
+
 export interface CrmProjectSummary {
   id: string;
   name: string;
@@ -340,6 +347,7 @@ export interface CrmProjectSummary {
   total_tasks: number;
   completed_tasks: number;
   pending_signatures: number;
+  signatures: CrmSignatureDetail[];
 }
 
 export interface ClientSummary {

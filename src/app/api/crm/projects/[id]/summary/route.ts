@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCrmApiKey } from '@/lib/auth';
 import { supabaseRest } from '@/lib/supabase';
-import type { Project, Task, Signature, CrmProjectSummary } from '@/lib/types';
+import type { Project, Task, Signature, Document, CrmProjectSummary, CrmSignatureDetail } from '@/lib/types';
 import { calcProgress } from '@/lib/utils';
 
 export async function GET(
@@ -28,6 +28,25 @@ export async function GET(
     const completedTasks = tasks.filter((t) => t.status === 'completed').length;
     const progress = calcProgress(completedTasks, tasks.length);
     const pendingSigs = signatures.filter((s) => ['pending', 'sent', 'viewed'].includes(s.status)).length;
+
+    // Fetch document names for signatures with document_id
+    const docIds = [...new Set(signatures.filter((s) => s.document_id).map((s) => s.document_id!))];
+    const docMap = new Map<string, string>();
+    if (docIds.length > 0) {
+      const docs = await supabaseRest<Document[]>(
+        `onboarding_documents?id=in.(${docIds.join(',')})\&select=id,name`,
+      );
+      for (const doc of docs) {
+        docMap.set(doc.id, doc.name);
+      }
+    }
+
+    const signatureDetails: CrmSignatureDetail[] = signatures.map((s) => ({
+      id: s.id,
+      signer_name: s.signer_name,
+      document_name: s.document_id ? docMap.get(s.document_id) || null : null,
+      status: s.status,
+    }));
 
     // Calculate days active
     let daysActive: number | null = null;
@@ -62,6 +81,7 @@ export async function GET(
       total_tasks: tasks.length,
       completed_tasks: completedTasks,
       pending_signatures: pendingSigs,
+      signatures: signatureDetails,
     };
 
     return NextResponse.json(summary);

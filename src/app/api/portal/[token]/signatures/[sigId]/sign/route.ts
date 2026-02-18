@@ -7,7 +7,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import type { Signature, Task, Document } from '@/lib/types';
 
 const CONSENT_TEXT =
-  'I agree to sign this document electronically and acknowledge that my electronic signature has the same legal effect as a handwritten signature.';
+  'I agree to sign this document electronically. I understand that my electronic signature has the same legal effect as a handwritten signature under the ESIGN Act and UETA.';
 
 interface SignRequestBody {
   signature_type: 'draw' | 'type';
@@ -16,6 +16,9 @@ interface SignRequestBody {
   signer_name: string;
   signer_email?: string;
   signer_title?: string;
+  signer_company?: string;
+  initials?: string;
+  initials_data?: string;
   consent_given: boolean;
 }
 
@@ -136,6 +139,10 @@ export async function POST(
       signatureUpdate.signer_title = body.signer_title;
     }
 
+    if (body.signer_company) {
+      signatureUpdate.signer_company = body.signer_company;
+    }
+
     const [updatedSignature] = await supabaseRest<Signature[]>(
       `onboarding_signatures?id=eq.${sigId}`,
       {
@@ -174,6 +181,10 @@ export async function POST(
           event_type: 'signed',
           event_data: {
             signer_name: body.signer_name,
+            signer_email: body.signer_email || null,
+            signer_title: body.signer_title || null,
+            signer_company: body.signer_company || null,
+            initials: body.initials || null,
             signature_type: body.signature_type,
             ip_address: ipAddress,
             user_agent: userAgent,
@@ -325,7 +336,8 @@ async function generateSignedPdf(
     timeZoneName: 'short',
   }) : new Date().toLocaleString();
 
-  const annotationText = `Electronically signed by ${signerName || 'Unknown'} on ${signedDate} | IP: ${ipAddress || 'unknown'}`;
+  const titleLine = signerName || 'Unknown';
+  const annotationText = `Electronically signed by ${titleLine} on ${signedDate} | IP: ${ipAddress || 'unknown'}`;
 
   lastPage.drawText(annotationText, {
     x: 50,

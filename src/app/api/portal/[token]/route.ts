@@ -43,7 +43,7 @@ export async function GET(
     const docMap = new Map<string, string>();
     if (docIds.length > 0) {
       const docs = await supabaseRest<Document[]>(
-        `onboarding_documents?id=in.(${docIds.join(',')})\&select=id,name`,
+        `onboarding_documents?id=in.(${docIds.join(',')})&select=id,name`,
       );
       for (const doc of docs) {
         docMap.set(doc.id, doc.name);

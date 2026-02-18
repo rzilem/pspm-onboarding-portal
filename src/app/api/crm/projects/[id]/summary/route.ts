@@ -14,6 +14,12 @@ export async function GET(
   try {
     const { id } = await params;
 
+    // Validate UUID format early
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_REGEX.test(id)) {
+      return NextResponse.json({ error: 'Invalid project ID format' }, { status: 400 });
+    }
+
     const [projects, tasks, signatures] = await Promise.all([
       supabaseRest<Project[]>(`onboarding_projects?id=eq.${id}&limit=1`),
       supabaseRest<Task[]>(`onboarding_tasks?project_id=eq.${id}&order=order_index`),
@@ -34,7 +40,7 @@ export async function GET(
     const docMap = new Map<string, string>();
     if (docIds.length > 0) {
       const docs = await supabaseRest<Document[]>(
-        `onboarding_documents?id=in.(${docIds.join(',')})\&select=id,name`,
+        `onboarding_documents?id=in.(${docIds.join(',')})&select=id,name`,
       );
       for (const doc of docs) {
         docMap.set(doc.id, doc.name);
@@ -86,6 +92,7 @@ export async function GET(
 
     return NextResponse.json(summary);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    console.error('[crm/summary] Failed to load project summary:', err);
+    return NextResponse.json({ error: 'Failed to load project summary' }, { status: 500 });
   }
 }

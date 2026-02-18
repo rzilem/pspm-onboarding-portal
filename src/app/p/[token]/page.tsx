@@ -271,12 +271,14 @@ export default function ClientPortalPage() {
                       <p className="text-xs text-gray-400 mt-0.5">Signed {formatDate(sig.signed_at)}</p>
                     )}
                   </div>
-                  <a href={`/api/portal/${token}/signatures/${sig.id}/document`} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" size="sm">
-                      <Download className="h-3.5 w-3.5 mr-1" />
-                      Download PDF
-                    </Button>
-                  </a>
+                  {sig.document_id && (
+                    <a href={`/api/portal/${token}/signatures/${sig.id}/document`} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" size="sm">
+                        <Download className="h-3.5 w-3.5 mr-1" />
+                        Download PDF
+                      </Button>
+                    </a>
+                  )}
                 </Card>
               ))}
             </div>

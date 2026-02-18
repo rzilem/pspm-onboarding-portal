@@ -135,6 +135,8 @@ export interface Signature {
   signer_email: string | null;
   signer_title: string | null;
   signer_company: string | null;
+  initials: string | null;
+  initials_data: string | null;
   signature_type: 'draw' | 'type' | null;
   signature_data: string | null;
   typed_name: string | null;

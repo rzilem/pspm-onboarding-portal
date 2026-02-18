@@ -32,6 +32,12 @@ export async function POST(
 ) {
   const { token, sigId } = await params;
 
+  // Validate UUID format early — before any Supabase queries
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(sigId)) {
+    return NextResponse.json({ error: 'Invalid signature ID format' }, { status: 400 });
+  }
+
   const project = await validatePortalToken(token);
   if (!project) {
     return NextResponse.json({ error: 'Invalid or expired portal link' }, { status: 404 });
@@ -106,9 +112,45 @@ export async function POST(
     );
   }
 
-  // Capture metadata
-  const ipAddress =
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  // Validate input lengths and formats
+  if (body.signer_name.length > 200) {
+    return NextResponse.json({ error: 'signer_name is too long (max 200 characters)' }, { status: 400 });
+  }
+
+  if (body.signer_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.signer_email)) {
+    return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+  }
+
+  if (body.typed_name && body.typed_name.length > 200) {
+    return NextResponse.json({ error: 'typed_name is too long (max 200 characters)' }, { status: 400 });
+  }
+
+  if (body.signer_title && body.signer_title.length > 200) {
+    return NextResponse.json({ error: 'signer_title is too long' }, { status: 400 });
+  }
+
+  if (body.signer_company && body.signer_company.length > 200) {
+    return NextResponse.json({ error: 'signer_company is too long' }, { status: 400 });
+  }
+
+  if (body.initials && body.initials.length > 5) {
+    return NextResponse.json({ error: 'initials is too long (max 5 characters)' }, { status: 400 });
+  }
+
+  // Limit base64 signature data to ~500KB
+  const MAX_BASE64_SIZE = 500 * 1024;
+  if (body.signature_data && body.signature_data.length > MAX_BASE64_SIZE) {
+    return NextResponse.json({ error: 'signature_data exceeds maximum size' }, { status: 400 });
+  }
+
+  if (body.initials_data && body.initials_data.length > MAX_BASE64_SIZE) {
+    return NextResponse.json({ error: 'initials_data exceeds maximum size' }, { status: 400 });
+  }
+
+  // Capture metadata — validate IP format for INET column compatibility
+  const IP_REGEX = /^(\d{1,3}\.){3}\d{1,3}$|^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+  const rawIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
+  const ipAddress = rawIp && IP_REGEX.test(rawIp) ? rawIp : null;
   const userAgent = req.headers.get('user-agent') || 'unknown';
   const now = new Date().toISOString();
 
@@ -117,13 +159,17 @@ export async function POST(
     const signatureUpdate: Record<string, unknown> = {
       signature_type: body.signature_type,
       signer_name: body.signer_name,
-      ip_address: ipAddress,
       user_agent: userAgent,
       consent_text: CONSENT_TEXT,
       consent_given_at: now,
       status: 'signed',
       signed_at: now,
     };
+
+    // Only set ip_address if we have a valid IP (column is INET type, rejects non-IP strings)
+    if (ipAddress) {
+      signatureUpdate.ip_address = ipAddress;
+    }
 
     if (body.signature_type === 'draw') {
       signatureUpdate.signature_data = body.signature_data;
@@ -143,7 +189,15 @@ export async function POST(
       signatureUpdate.signer_company = body.signer_company;
     }
 
-    const [updatedSignature] = await supabaseRest<Signature[]>(
+    if (body.initials) {
+      signatureUpdate.initials = body.initials;
+    }
+
+    if (body.initials_data) {
+      signatureUpdate.initials_data = body.initials_data;
+    }
+
+    const results = await supabaseRest<Signature[]>(
       `onboarding_signatures?id=eq.${sigId}`,
       {
         method: 'PATCH',
@@ -151,6 +205,11 @@ export async function POST(
         prefer: 'return=representation',
       },
     );
+
+    if (!results.length) {
+      return NextResponse.json({ error: 'Signature update failed' }, { status: 500 });
+    }
+    const updatedSignature = results[0];
 
     // Generate signed PDF if signature has a document
     if (signature.document_id) {
@@ -163,7 +222,7 @@ export async function POST(
           body.typed_name,
           body.signer_name,
           now,
-          ipAddress,
+          ipAddress ?? undefined,
         );
       } catch (pdfErr) {
         // Non-fatal — signature was recorded, PDF generation is enhancement
@@ -171,30 +230,35 @@ export async function POST(
       }
     }
 
-    // Insert audit record
-    await supabaseRest(
-      'onboarding_signature_audit',
-      {
-        method: 'POST',
-        body: JSON.stringify({
-          signature_id: sigId,
-          event_type: 'signed',
-          event_data: {
-            signer_name: body.signer_name,
-            signer_email: body.signer_email || null,
-            signer_title: body.signer_title || null,
-            signer_company: body.signer_company || null,
-            initials: body.initials || null,
-            signature_type: body.signature_type,
-            ip_address: ipAddress,
+    // Insert audit record (non-fatal — signature is already recorded)
+    try {
+      await supabaseRest(
+        'onboarding_signature_audit',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            signature_id: sigId,
+            event_type: 'signed',
+            event_data: {
+              signer_name: body.signer_name,
+              signer_email: body.signer_email || null,
+              signer_title: body.signer_title || null,
+              signer_company: body.signer_company || null,
+              initials: body.initials || null,
+              signature_type: body.signature_type,
+              ip_address: ipAddress,
+              user_agent: userAgent,
+            },
+            ip_address: ipAddress ?? undefined,
             user_agent: userAgent,
-          },
-          ip_address: ipAddress,
-          user_agent: userAgent,
-        }),
-        prefer: 'return=minimal',
-      },
-    );
+          }),
+          prefer: 'return=minimal',
+        },
+      );
+    } catch (auditErr) {
+      // Non-fatal — signature was recorded, audit is secondary
+      console.error('[portal/sign] Failed to insert audit record:', auditErr);
+    }
 
     // If linked to a task, mark that task as completed
     if (signature.task_id) {
@@ -281,14 +345,14 @@ async function generateSignedPdf(
   }
 
   const document = documents[0];
-
-  if (!document.template_url) {
-    console.warn('[generateSignedPdf] Document has no template URL');
-    return;
-  }
+  const templateUrl = document.template_url!; // narrowed by guard above
 
   // Download original PDF from storage
-  const pdfBytes = await supabaseStorageDownload('onboarding-files', document.template_url);
+  // template_url is stored as "bucket/path" (e.g. "onboarding-files/documents/uuid/file.pdf")
+  // Split to extract bucket and path separately to avoid double-prefixing
+  const [bucket, ...pathParts] = templateUrl.split('/');
+  const filePath = pathParts.join('/');
+  const pdfBytes = await supabaseStorageDownload(bucket, filePath);
 
   // Load PDF with pdf-lib
   const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -351,15 +415,17 @@ async function generateSignedPdf(
   const signedPdfBytes = await pdfDoc.save();
 
   // Upload signed PDF to storage
-  const signedPdfPath = `onboarding-files/signed/${signatureId}.pdf`;
+  // Path within the bucket (NOT prefixed with bucket name)
+  const storagePath = `signed/${signatureId}.pdf`;
   await supabaseStorageUpload(
     'onboarding-files',
-    signedPdfPath,
+    storagePath,
     signedPdfBytes,
     'application/pdf',
   );
 
-  // Update signature record with signed_pdf_path
+  // Store as bucket/path so the download endpoint can split on first '/'
+  const signedPdfPath = `onboarding-files/${storagePath}`;
   await supabaseRest(
     `onboarding_signatures?id=eq.${signatureId}`,
     {

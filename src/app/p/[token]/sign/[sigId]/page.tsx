@@ -74,14 +74,15 @@ export default function SignaturePage() {
     load();
   }, [token, sigId]);
 
-  // Auto-generate initials from name
+  // Auto-generate initials from name (only on initial load or name change, not when user manually edits)
+  const initialsManuallyEdited = useRef(false);
   useEffect(() => {
-    if (signerName && !initials) {
+    if (signerName && !initialsManuallyEdited.current) {
       const parts = signerName.trim().split(/\s+/);
       const auto = parts.map((p) => p[0]?.toUpperCase() || '').join('');
       setInitials(auto);
     }
-  }, [signerName, initials]);
+  }, [signerName]);
 
   function initCanvas(canvas: HTMLCanvasElement | null) {
     if (!canvas) return;
@@ -357,7 +358,10 @@ export default function SignaturePage() {
               <label className="text-xs font-medium text-gray-500 mb-1 block">Initials</label>
               <Input
                 value={initials}
-                onChange={(e) => setInitials(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  initialsManuallyEdited.current = true;
+                  setInitials(e.target.value.toUpperCase());
+                }}
                 placeholder="e.g. JD"
                 maxLength={5}
                 className="uppercase tracking-widest"

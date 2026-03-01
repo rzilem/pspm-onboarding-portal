@@ -54,6 +54,7 @@ const ACTION_LABELS: Record<AutomationActionType, string> = {
   complete_stage: 'Complete Stage',
   send_email: 'Send Email',
   update_project_status: 'Update Project Status',
+  notify_crm: 'Notify CRM',
 };
 
 const TRIGGER_TYPES = Object.keys(TRIGGER_LABELS) as AutomationTriggerType[];

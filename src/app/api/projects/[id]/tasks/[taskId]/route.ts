@@ -1,3 +1,4 @@
+import { notifyCrm } from '@/lib/crm-webhook';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseRest } from '@/lib/supabase';
@@ -66,6 +67,28 @@ export async function PATCH(
     if (body.status === 'completed') {
       evaluateAutomations(id, { type: 'task_completed', task_id: taskId }).catch(console.error);
       checkAndAdvanceStages(id, taskId).catch(console.error);
+    }
+
+        // Notify CRM on task completion
+    if (body.status === 'completed' && updated[0]) {
+      // Fetch project to get source_deal_id
+      const projects = await supabaseRest(
+        `onboarding_projects?id=eq.${encodeURIComponent(id)}&select=source_deal_id,name&limit=1`,
+      );
+      const proj = projects[0];
+      if (proj?.source_deal_id) {
+        notifyCrm({
+          type: 'task_completed',
+          project_id: id,
+          source_deal_id: proj.source_deal_id,
+          data: {
+            task_id: taskId,
+            task_title: updated[0].title || taskId,
+            project_name: proj.name,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
     }
 
     return NextResponse.json(updated[0]);

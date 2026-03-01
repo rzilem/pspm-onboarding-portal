@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateCrmApiKey } from '@/lib/auth';
 import { supabaseRest } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
+import { notifyCrm } from '@/lib/crm-webhook';
 import type { Project, Task } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
@@ -91,6 +92,20 @@ export async function POST(req: NextRequest) {
       actor_type: 'system',
       action: 'project_created_from_crm',
       details: { source_deal_id: body.source_deal_id },
+    });
+
+    // Notify CRM webhook
+    notifyCrm({
+      type: 'project_created',
+      project_id: project.id,
+      source_deal_id: body.source_deal_id,
+      data: {
+        project_name: project.name,
+        client_company_name: body.client_company_name,
+        client_contact_name: body.client_contact_name,
+        template_id: body.template_id,
+      },
+      timestamp: new Date().toISOString(),
     });
 
     return NextResponse.json(project, { status: 201 });

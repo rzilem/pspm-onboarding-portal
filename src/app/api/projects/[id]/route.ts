@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateApiKey } from '@/lib/auth';
 import { supabaseRest } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
+import { notifyCrm } from '@/lib/crm-webhook';
 import type { Project, Task, OnboardingFile, Signature } from '@/lib/types';
 
 /**
@@ -105,6 +106,20 @@ export async function PATCH(
         status: body.status || undefined,
       },
     });
+
+        // Notify CRM if status changed and project has a linked deal
+    if (body.status && updated[0]?.source_deal_id) {
+      notifyCrm({
+        type: body.status === 'completed' ? 'project_completed' : 'project_status_changed',
+        project_id: id,
+        source_deal_id: updated[0].source_deal_id,
+        data: {
+          project_name: updated[0].name,
+          new_status: body.status,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     return NextResponse.json(updated[0]);
   } catch (err) {

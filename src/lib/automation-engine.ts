@@ -6,6 +6,7 @@
 
 import { supabaseRest } from './supabase';
 import { sendStaffNotification, sendClientInvite, sendTaskReminder } from './email';
+import { notifyCrm, type CrmWebhookEvent } from './crm-webhook';
 import type {
   Automation,
   AutomationTriggerType,
@@ -221,6 +222,9 @@ async function executeAction(
 
     case 'update_project_status':
       return updateProjectStatus(project.id, config);
+
+    case 'notify_crm':
+      return notifyCrmAction(project, config, context);
 
     default:
       throw new Error(`Unknown action_type: ${automation.action_type}`);
@@ -445,4 +449,27 @@ async function logAutomationExecution(
   } catch (err) {
     console.error('[automation-engine] Failed to log execution:', err);
   }
+}
+
+async function notifyCrmAction(
+  project: Project,
+  config: Record<string, unknown>,
+  context: ContextData,
+): Promise<Record<string, unknown>> {
+  const eventType = (config.event_type as string) || 'project_status_changed';
+
+  await notifyCrm({
+    type: eventType as CrmWebhookEvent['type'],
+    project_id: project.id,
+    source_deal_id: (project as Record<string, unknown>).source_deal_id as string | null,
+    data: {
+      project_name: project.name,
+      project_status: project.status,
+      community_name: project.community_name,
+      ...context,
+    },
+    timestamp: new Date().toISOString(),
+  });
+
+  return { notified: true, event_type: eventType };
 }

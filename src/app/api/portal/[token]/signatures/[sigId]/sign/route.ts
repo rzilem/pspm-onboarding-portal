@@ -1,3 +1,4 @@
+import { notifyCrm } from '@/lib/crm-webhook';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseRest, supabaseStorageDownload, supabaseStorageUpload } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
@@ -317,6 +318,27 @@ export async function POST(
     return NextResponse.json(updatedSignature);
   } catch (err) {
     console.error('[portal/sign] Failed to process signature:', err);
+        // Notify CRM on signature
+    try {
+      const projects = await supabaseRest(
+        `onboarding_projects?id=eq.${encodeURIComponent(projectId)}&select=source_deal_id,name&limit=1`,
+      );
+      const proj = projects[0];
+      if (proj?.source_deal_id) {
+        notifyCrm({
+          type: 'signature_signed',
+          project_id: projectId,
+          source_deal_id: proj.source_deal_id,
+          data: {
+            signature_id: sigId,
+            signer_name: body.signer_name,
+            project_name: proj.name,
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    } catch (_) { /* fire and forget */ }
+
     return NextResponse.json({ error: 'Failed to process signature' }, { status: 500 });
   }
 }

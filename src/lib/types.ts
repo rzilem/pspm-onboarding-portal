@@ -254,7 +254,7 @@ export interface Automation {
 }
 
 export type AutomationTriggerType = 'task_completed' | 'stage_completed' | 'project_created' | 'file_uploaded' | 'signature_signed';
-export type AutomationActionType = 'activate_task' | 'complete_task' | 'activate_stage' | 'complete_stage' | 'send_email' | 'update_project_status';
+export type AutomationActionType = 'activate_task' | 'complete_task' | 'activate_stage' | 'complete_stage' | 'send_email' | 'update_project_status' | 'notify_crm';
 
 // --- Automation Log ---
 

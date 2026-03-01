@@ -72,7 +72,7 @@ export async function PATCH(
         // Notify CRM on task completion
     if (body.status === 'completed' && updated[0]) {
       // Fetch project to get source_deal_id
-      const projects = await supabaseRest(
+      const projects = await supabaseRest<Array<{ source_deal_id: string | null; name: string }>>(
         `onboarding_projects?id=eq.${encodeURIComponent(id)}&select=source_deal_id,name&limit=1`,
       );
       const proj = projects[0];

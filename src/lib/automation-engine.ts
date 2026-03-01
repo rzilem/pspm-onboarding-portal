@@ -38,7 +38,7 @@ export async function evaluateAutomations(
   try {
     // 1. Look up the project to get template_id
     const projects = await supabaseRest<Project[]>(
-      `onboarding_projects?id=eq.${encodeURIComponent(projectId)}&select=id,template_id,name,client_contact_email,client_contact_name,community_name,assigned_staff_email,public_token,status&limit=1`,
+      `onboarding_projects?id=eq.${encodeURIComponent(projectId)}&select=id,template_id,name,client_contact_email,client_contact_name,community_name,assigned_staff_email,public_token,status,source_deal_id&limit=1`,
     );
 
     if (!projects.length) {
@@ -461,7 +461,7 @@ async function notifyCrmAction(
   await notifyCrm({
     type: eventType as CrmWebhookEvent['type'],
     project_id: project.id,
-    source_deal_id: (project as Record<string, unknown>).source_deal_id as string | null,
+    source_deal_id: project.source_deal_id,
     data: {
       project_name: project.name,
       project_status: project.status,

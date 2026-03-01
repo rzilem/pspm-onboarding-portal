@@ -315,30 +315,29 @@ export async function POST(
     // Trigger automations on signature (fire-and-forget)
     evaluateAutomations(project.id, { type: 'signature_signed', signature_id: sigId }).catch(console.error);
 
-    return NextResponse.json(updatedSignature);
-  } catch (err) {
-    console.error('[portal/sign] Failed to process signature:', err);
-        // Notify CRM on signature
+    // Notify CRM on signature (fire-and-forget)
     try {
-      const projects = await supabaseRest(
-        `onboarding_projects?id=eq.${encodeURIComponent(projectId)}&select=source_deal_id,name&limit=1`,
+      const fullProj = await supabaseRest<Array<{ source_deal_id: string | null }>>(
+        `onboarding_projects?id=eq.${encodeURIComponent(project.id)}&select=source_deal_id&limit=1`,
       );
-      const proj = projects[0];
-      if (proj?.source_deal_id) {
+      if (fullProj[0]?.source_deal_id) {
         notifyCrm({
           type: 'signature_signed',
-          project_id: projectId,
-          source_deal_id: proj.source_deal_id,
+          project_id: project.id,
+          source_deal_id: fullProj[0].source_deal_id,
           data: {
             signature_id: sigId,
             signer_name: body.signer_name,
-            project_name: proj.name,
+            project_name: project.name,
           },
           timestamp: new Date().toISOString(),
         });
       }
-    } catch (_) { /* fire and forget */ }
+    } catch (_webhookErr) { /* fire-and-forget */ }
 
+    return NextResponse.json(updatedSignature);
+  } catch (err) {
+    console.error('[portal/sign] Failed to process signature:', err);
     return NextResponse.json({ error: 'Failed to process signature' }, { status: 500 });
   }
 }

@@ -36,6 +36,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Only PDF files are allowed' }, { status: 400 });
     }
 
+    // Server-side PDF magic byte validation (client MIME type can be spoofed)
+    const headerBytes = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    const isPdf = headerBytes[0] === 0x25 && headerBytes[1] === 0x50 &&
+                  headerBytes[2] === 0x44 && headerBytes[3] === 0x46; // %PDF
+    if (!isPdf) {
+      return NextResponse.json({ error: 'File is not a valid PDF' }, { status: 400 });
+    }
+
     const maxSize = 50 * 1024 * 1024; // 50MB
     if (file.size > maxSize) {
       return NextResponse.json({ error: 'File must be under 50MB' }, { status: 400 });

@@ -77,7 +77,7 @@ export async function requireSession(): Promise<
 export async function validatePortalToken(
   token: string,
 ): Promise<{ id: string; name: string; status: string } | null> {
-  if (!token || token.length < 16) return null;
+  if (!token || token.length < 16 || token.length > 256) return null;
 
   const { supabaseRest } = await import('@/lib/supabase');
 

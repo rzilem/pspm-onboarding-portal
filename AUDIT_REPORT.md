@@ -10,7 +10,7 @@
 
 The PSPM Onboarding Portal is a **Next.js 16 + Supabase** application for managing HOA community onboarding workflows. It includes a staff dashboard, client portal, template/automation engine, electronic signature system, and CRM integration points.
 
-**TypeScript compiles clean** — zero type errors. The architecture is sound and the code is well-structured. However, this audit found **5 critical bugs**, **8 significant issues**, and **12 minor issues** that need attention before production use.
+**TypeScript compiles clean** — zero type errors. The architecture is sound and the code is well-structured. However, this audit found **6 critical bugs**, **12 significant issues**, and **15 minor issues** that need attention before production use.
 
 ---
 
@@ -45,6 +45,11 @@ The PSPM Onboarding Portal is a **Next.js 16 + Supabase** application for managi
 - **File:** `src/app/api/crm/projects/route.ts:62-87`
 - **Impact:** When the CRM creates a project from a template, it copies template tasks but **does NOT copy template stages** and **does NOT assign `stage_id`** to the copied tasks. This means CRM-created projects will have **no stage groupings** — the entire stage-based workflow and stage-completion automations won't function.
 - **Fix:** After copying tasks, also copy template stages (converting `template_id` to `project_id`) and map the task `stage_id` values to the new project stage IDs.
+
+### 6. Comments table RLS policy is permissive to ALL roles
+- **File:** `supabase/migrations/006_comments.sql:22-25`
+- **Impact:** The `service_role_full_access` policy on `onboarding_comments` uses `USING (true) WITH CHECK (true)` without scoping to `service_role`. This means the `anon` role also gets full read/write access to all comments, unlike every other table which scopes to `service_role`.
+- **Fix:** Change to `FOR ALL TO service_role USING (true) WITH CHECK (true)`.
 
 ---
 
@@ -94,56 +99,92 @@ The PSPM Onboarding Portal is a **Next.js 16 + Supabase** application for managi
 - **Impact:** The admin API key is accessible to any JavaScript running on the page. Any XSS vulnerability would expose the key.
 - **Recommendation:** Use httpOnly cookies instead.
 
+### 14. Sign Out link is broken
+- **File:** `src/app/(dashboard)/layout.tsx`
+- **Impact:** Sign Out navigates to `/api/auth/signout` (NextAuth), but auth is actually sessionStorage-based API key. Clicking Sign Out will not clear the API key from sessionStorage. Auth flow is inconsistent between NextAuth (configured but largely unused) and API key auth (actually used).
+
+### 15. Portal allows clients to complete internal/staff tasks
+- **File:** `src/app/p/[token]/page.tsx`
+- **Impact:** The `completeTask` function PATCHes any task to `completed` without validating that the task is `external` / `client`-assignable. A client could mark internal staff tasks as completed through the portal.
+- **Fix:** Add server-side validation in the portal task PATCH route to only allow completing `external` tasks.
+
+### 16. Kanban board missing `cancelled` column
+- **File:** `src/app/(dashboard)/projects/page.tsx`
+- **Impact:** The board view defines columns for `draft`, `active`, `paused`, `completed` but NOT `cancelled`. Projects with cancelled status disappear entirely from the board view.
+
+### 17. Document download opens in new tab without auth
+- **File:** `src/app/(dashboard)/documents/page.tsx`
+- **Impact:** `handleDownload` opens `/api/documents/${doc.id}/download` in a new tab. The new tab has no `sessionStorage` context, so the API key header won't be sent, causing a 401 error.
+
+### 18. No automated signature requests when creating from template
+- **Impact:** Even though template tasks can have `requires_signature: true`, creating a project from a template does NOT automatically create signature records in `onboarding_signatures`. Staff must manually create each signature request.
+
+### 19. `document_hash` field never populated (ESIGN compliance gap)
+- **File:** `src/app/api/portal/[token]/signatures/[sigId]/sign/route.ts`
+- **Impact:** The `document_hash` column exists in the signatures table for ESIGN compliance (SHA-256 of the document at signing time), but no code ever computes or stores it.
+
 ---
 
 ## MINOR ISSUES
 
-### 14. `hooks.ts` is misnamed — contains no React hooks
+### 20. `hooks.ts` is misnamed — contains no React hooks
 - Just utility functions for auth/fetch. Should be renamed to `client-auth.ts` or similar.
 
-### 15. `paginationParams` doesn't validate NaN
+### 21. `paginationParams` doesn't validate NaN
 - **File:** `src/lib/api-client.ts:59`
 - `parseInt('abc')` returns NaN which propagates into query strings.
 
-### 16. `paginationParams` returns string starting with `&`
+### 22. `paginationParams` returns string starting with `&`
 - **File:** `src/lib/api-client.ts:60`
 - Assumes caller already has a `?` in the query. Could produce `?&limit=...`.
 
-### 17. Supabase `204` response returns `[] as unknown as T`
+### 23. Supabase `204` response returns `[] as unknown as T`
 - **File:** `src/lib/supabase.ts:72`
 - Type lie — callers expecting an object will get an empty array.
 
-### 18. Hardcoded production URL in email fallback
+### 24. Hardcoded production URL in email fallback
 - **File:** `src/lib/email.ts:9`
 - Falls back to a Cloud Run URL if `NEXTAUTH_URL` is not set.
 
-### 19. Azure AD tenant ID committed in .env.example
+### 25. Azure AD tenant ID committed in .env.example
 - **File:** `.env.example:13`
 - Not a secret, but reveals the organization's Azure AD tenant.
 
-### 20. No project-level completion check in stage-utils
+### 26. No project-level completion check in stage-utils
 - **File:** `src/lib/stage-utils.ts`
 - When the last stage completes, nothing checks if the overall project should be marked complete. This only works if an automation is configured for it — fragile.
 
-### 21. `validatePortalToken` allows access to completed projects
+### 27. `validatePortalToken` allows access to completed projects
 - **File:** `src/lib/auth.ts:94`
 - Only `draft` and `cancelled` are blocked. May be intentional but should be documented.
 
-### 22. Signature data not validated for valid base64
+### 28. Signature data not validated for valid base64
 - **File:** `src/app/api/portal/[token]/signatures/[sigId]/sign/route.ts`
 - `signature_data` is checked for length but not validated as proper base64 PNG. Malformed data would cause `embedPng` to throw.
 
-### 23. No circular automation guard
+### 29. No circular automation guard
 - **File:** `src/lib/automation-engine.ts`
 - Automation A could complete a task that triggers Automation B, which could trigger Automation A again. No recursion prevention exists.
 
-### 24. PDF signature position is hardcoded
+### 30. PDF signature position is hardcoded
 - **File:** `src/app/api/portal/[token]/signatures/[sigId]/sign/route.ts:392-410`
 - Signature is always placed at fixed coordinates (50, 120). Will overlap existing content on PDFs that use that space.
 
-### 25. `file as BodyInit` type cast in supabase storage upload
+### 31. `file as BodyInit` type cast in supabase storage upload
 - **File:** `src/lib/supabase.ts:96`
 - Minor TypeScript concern — `Uint8Array | ArrayBuffer` isn't guaranteed to satisfy `BodyInit` in all TS DOM lib versions.
+
+### 32. No auth guard on dashboard layout
+- **File:** `src/app/(dashboard)/layout.tsx`
+- No middleware or layout-level check verifies the user has an API key. Users can navigate to any dashboard page unauthenticated — API calls fail with 401 and error UI renders instead of redirecting to login.
+
+### 33. Portal upload page lacks task validation
+- **File:** `src/app/p/[token]/upload/[taskId]/page.tsx`
+- No check that the task belongs to the project, exists, or actually requires file upload.
+
+### 34. `Brush Script MT` font unavailable on Linux/Android
+- **File:** `src/app/p/[token]/sign/[sigId]/page.tsx`
+- Typed signatures use `'Brush Script MT', cursive` which doesn't exist on Linux/Android, falling back to generic cursive.
 
 ---
 
@@ -310,10 +351,18 @@ Here is the complete flow as implemented:
 1. **[Critical]** Add `notify_crm` to database CHECK constraint (new migration)
 2. **[Critical]** Fix CRM project creation to copy stages and map stage_ids
 3. **[Critical]** Fix `sendAutomationEmail` to dispatch to correct email template
-4. **[High]** Add missing env vars to `.env.example`
-5. **[High]** Fix cron auth bypass when env vars are empty
-6. **[High]** HTML-escape user input in email templates
-7. **[Medium]** Implement delayed automation cron or remove the feature
-8. **[Medium]** Add retry mechanism to CRM webhook
-9. **[Medium]** Sanitize context data before sending to CRM
-10. **[Low]** Fix pagination NaN handling, dead imports, naming conventions
+4. **[Critical]** Fix comments table RLS policy (scoped to `service_role`, not open to all)
+5. **[High]** Add missing env vars to `.env.example`
+6. **[High]** Fix cron auth bypass when env vars are empty
+7. **[High]** HTML-escape user input in email templates
+8. **[High]** Fix Sign Out to clear sessionStorage instead of hitting NextAuth route
+9. **[High]** Add server-side validation to prevent clients completing internal tasks via portal
+10. **[High]** Compute and store `document_hash` for ESIGN compliance
+11. **[Medium]** Implement delayed automation cron or remove the feature
+12. **[Medium]** Add retry mechanism to CRM webhook
+13. **[Medium]** Sanitize context data before sending to CRM
+14. **[Medium]** Add `cancelled` column to Kanban board view
+15. **[Medium]** Fix document download to work in new tab (cookie auth or query param token)
+16. **[Low]** Fix pagination NaN handling, dead imports, naming conventions
+17. **[Low]** Add auth guard/redirect on dashboard layout
+18. **[Low]** Validate portal upload task ownership

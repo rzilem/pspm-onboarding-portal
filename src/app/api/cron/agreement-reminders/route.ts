@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
             from: 'PS Property Management <agreements@psprop.net>',
             to: signer.email,
             subject: `Reminder: Management agreement for ${request.document_title} awaiting your signature`,
-            html: buildReminderEmail(signer.name, reminderIntro, request.document_title, signer.id),
+            html: buildReminderEmail(signer.name, reminderIntro, request.document_title, signer.signing_url || ''),
           }),
         });
       }
@@ -125,7 +125,7 @@ function buildReminderEmail(
   name: string,
   intro: string,
   documentTitle: string,
-  signerId: string
+  signingUrl: string
 ): string {
   return `
 <!DOCTYPE html>
@@ -146,7 +146,7 @@ function buildReminderEmail(
     <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">Hi ${name},</p>
     <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">${intro}</p>
     <div style="text-align:center;margin:32px 0;">
-      <a href="${process.env.NEXT_PUBLIC_APP_URL}/sign/${signerId}" style="display:inline-block;background:#3B6FB6;color:#fff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">
+      <a href="${signingUrl}" style="display:inline-block;background:#3B6FB6;color:#fff;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:600;text-decoration:none;">
         Review & Sign Agreement
       </a>
     </div>

@@ -51,18 +51,30 @@ export async function notifyCrm(event: CrmWebhookEvent): Promise<void> {
       headers['X-Webhook-Signature'] = signature;
     }
 
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers,
-      body: payload,
-      signal: AbortSignal.timeout(5000), // 5s timeout
-    });
+    // Retry up to 3 times with backoff for transient failures
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch(webhookUrl, {
+          method: 'POST',
+          headers,
+          body: payload,
+          signal: AbortSignal.timeout(5000),
+        });
 
-    if (!res.ok) {
-      console.error(`[crm-webhook] POST ${webhookUrl} returned ${res.status}`);
+        if (res.ok) return; // Success
+
+        lastErr = `POST ${webhookUrl} returned ${res.status}`;
+        if (res.status < 500) break; // Don't retry 4xx
+      } catch (err: any) {
+        lastErr = err.message || String(err);
+      }
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, attempt * 1000));
+      }
     }
+    console.error(`[crm-webhook] Failed after 3 attempts: ${lastErr}`);
   } catch (err) {
     console.error('[crm-webhook] Failed to notify CRM:', err);
-    // Fire-and-forget — never throw
   }
 }
